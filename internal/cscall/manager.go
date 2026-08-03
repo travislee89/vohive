@@ -41,6 +41,9 @@ type Manager struct {
 	controllerCallID string
 	currentCall      *CSCall
 
+	// subscribers 保存订阅呼叫事件的外部监听者（如 API SSE 推送）
+	subscribers map[chan Event]struct{}
+
 	monitorCtx    context.Context
 	monitorCancel context.CancelFunc
 }
@@ -71,6 +74,7 @@ func NewManagerWithController(deviceID, audioDev string, controller Controller, 
 		registrar:  r,
 
 		state:         CallStateIdle,
+		subscribers:   make(map[chan Event]struct{}),
 		monitorCtx:    ctx,
 		monitorCancel: cancel,
 	}
@@ -110,6 +114,7 @@ func (m *Manager) monitorControllerEvents() {
 				return
 			}
 			m.handleControllerEvent(event)
+			m.broadcastEvent(event)
 		}
 	}
 }
@@ -123,6 +128,45 @@ func (m *Manager) handleControllerEvent(event Event) {
 	case EventConnected:
 		m.onControllerConnected(event.CallID)
 	}
+}
+
+// broadcastEvent 将呼叫事件多播给所有外部订阅者（非阻塞，通道满则丢弃）
+func (m *Manager) broadcastEvent(event Event) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for ch := range m.subscribers {
+		select {
+		case ch <- event:
+		default:
+		}
+	}
+}
+
+// Subscribe 注册一个呼叫事件订阅者，返回事件通道与取消订阅函数。
+// 订阅者会收到来电(EventIncoming，含号码)、挂断(EventHangup)、接通(EventConnected)等事件。
+func (m *Manager) Subscribe() (<-chan Event, func()) {
+	ch := make(chan Event, 16)
+	m.mu.Lock()
+	m.subscribers[ch] = struct{}{}
+	m.mu.Unlock()
+	cancel := func() {
+		m.mu.Lock()
+		delete(m.subscribers, ch)
+		m.mu.Unlock()
+	}
+	return ch, cancel
+}
+
+// Calls 返回当前活跃的呼叫列表。若控制器不可用则返回空列表。
+func (m *Manager) Calls(ctx context.Context) []CallInfo {
+	if m.controller == nil {
+		return nil
+	}
+	calls, err := m.controller.GetCalls(ctx)
+	if err != nil {
+		return nil
+	}
+	return calls
 }
 
 func (m *Manager) monitorPCMReady() {

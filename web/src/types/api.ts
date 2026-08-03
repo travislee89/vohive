@@ -53,6 +53,28 @@ export type VoWiFiRuntimeState = {
   updated_at?: string
 }
 
+// ===== 来电查询 (CS Call) =====
+export type CSCallState = 'ringing' | 'dialing' | 'connected' | 'idle'
+
+export type CSCallInfo = {
+  id: string
+  number: string
+  direction: 'in' | 'out'
+  state: CSCallState
+}
+
+export type CSCallListResponse = {
+  device_id: string
+  calls: CSCallInfo[]
+}
+
+export type CSCallEvent = {
+  type: 'incoming' | 'hangup' | 'connected' | 'error'
+  call_id: string
+  number?: string
+  ts: number
+}
+
 export type DeviceLifecyclePhase =
   | 'offline'
   | 'rebooting'
