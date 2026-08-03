@@ -373,9 +373,12 @@ onBeforeUnmount(() => {
             <div class="p-3 bg-gray-50 dark:bg-white/5 rounded-lg">
               <FieldRow label="版本" :value="systemInfo.version" monospace>
                 <div class="flex items-center justify-end gap-3">
+                  <!-- 检查更新按钮已暂时隐藏，功能代码保留（doCheckUpdate / doApplyUpdate） -->
+                  <!--
                   <el-button size="small" type="primary" class="!border-0" :loading="checkingUpdate" @click.stop="doCheckUpdate">
                     检查更新
                   </el-button>
+                  -->
                   <span>{{ systemInfo.version || 'Unknown' }}</span>
                 </div>
               </FieldRow>
@@ -397,9 +400,6 @@ onBeforeUnmount(() => {
             </div>
             <div class="p-3 bg-gray-50 dark:bg-white/5 rounded-lg">
               <FieldRow label="配置路径" :value="systemInfo.config" monospace copyable />
-            </div>
-            <div class="p-3 bg-gray-50 dark:bg-white/5 rounded-lg">
-              <FieldRow label="交流群" value="https://t.me/vohive" monospace copyable />
             </div>
             <div class="ui-panel-muted px-4 py-4">
               <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
