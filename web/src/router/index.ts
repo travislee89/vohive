@@ -23,6 +23,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/calls',
+      name: 'Calls',
+      component: () => import('../views/Calls.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/devices',
       name: 'Devices',
       component: () => import('../views/Devices.vue'),

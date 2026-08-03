@@ -288,6 +288,10 @@ func (s *Server) newRouter() *gin.Engine {
 		api.GET("/devices/:device_id/operator_selection", s.handleDeviceMgmtGetOperatorSelection)           // 获取当前选网配置
 		api.POST("/devices/:device_id/operator_selection", s.handleDeviceMgmtSetOperatorSelection)          // 锁定运营商或恢复自动
 
+		// ===== 来电查询 (CS Call) =====
+		api.GET("/devices/:device_id/calls", s.handleDeviceMgmtCSCallList)          // 查询当前活跃呼叫列表
+		api.GET("/devices/:device_id/calls/events", s.handleDeviceMgmtCSCallEvents) // SSE 实时推送来电事件
+
 		// ===== 代理管理 =====
 		api.GET("/proxy-instances/overview", s.handleProxyOverview)                             // 获取代理实例概览
 		api.PUT("/proxy-instances/config", s.handleProxyUpdateConfig)                           // 保存代理配置
