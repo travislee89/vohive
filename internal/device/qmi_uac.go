@@ -29,6 +29,18 @@ func (p *Pool) enableQuectelUACAndReboot(w *Worker, atPort string) {
 		return
 	}
 
+	// 同一进程内对同一设备只尝试一次 UAC 开启。
+	// 模组重启恢复期间会多次重建 worker 并重新进入 bootstrap，若无此去重，
+	// 每次都会重复打开 AT 口（重启中 AT 口不可用会超时，恢复后 UAC 已开会重复查询）。
+	p.mu.Lock()
+	if p.uacAttempted[deviceID] {
+		p.mu.Unlock()
+		logger.Debug(fmt.Sprintf("[%s] 跳过 UAC 开启：本进程已尝试过", deviceID))
+		return
+	}
+	p.uacAttempted[deviceID] = true
+	p.mu.Unlock()
+
 	logger.Info(fmt.Sprintf("[%s] 未发现 USB 音频设备，尝试通过 %s 开启 Quectel USB Audio (UAC)", deviceID, atPort))
 	modified, err := tryEnableQuectelUAC(deviceID, atPort)
 	if err != nil {
