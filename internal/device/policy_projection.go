@@ -6,6 +6,7 @@ import (
 
 	"github.com/boa-z/vohive/internal/backend"
 	"github.com/boa-z/vohive/internal/cardpolicy"
+	"github.com/boa-z/vohive/internal/db"
 	"github.com/boa-z/vohive/pkg/logger"
 )
 
@@ -70,6 +71,15 @@ func (p *Pool) resolveAndApplyPolicy(worker *Worker, reason string) policyApplyR
 	default:
 		// 在线(待机或连网)：若当前在飞行先退出飞行，再按 network 偏好。
 		p.exitAirplaneModeIfNeeded(worker, reason)
+		// 流量限制拦截：若该卡启用了自动关闭网络且当前计费周期用量已达阈值，
+		// 跳过开网偏好（仅拦截，不落库——保留用户开网意图，下个周期自动恢复）。
+		if pol.QuotaEnabled && pol.AutoStopEnabled && pol.NetworkEnabled {
+			if qr := db.IsCardQuotaExceeded(iccid, pol.QuotaBytes, pol.AutoStopThresholdBytes, true, pol.BillingDay, pol.BillingTimezone, time.Now()); qr.Exceeded {
+				logger.Info("流量超限，跳过自动开网", "device", worker.ID, "iccid", iccid,
+					"used", qr.UsedBytes, "threshold", qr.Threshold, "reason", reason)
+				return policyApplyResult{Applied: true, ICCID: iccid, Reason: reason}
+			}
+		}
 		if err := p.applyNetworkPreference(worker); err != nil {
 			logger.Warn("应用网络偏好失败", "device", worker.ID, "err", err)
 		}
@@ -147,4 +157,18 @@ func (p *Pool) SetPolicyResolver(r cardpolicy.Resolver) {
 	p.mu.Lock()
 	p.policyResolver = r
 	p.mu.Unlock()
+}
+
+// ReapplyCardPolicy 重新解析并投影指定设备的当前卡策略。
+// 供流量采样器在计费周期 rollover 后调用，使跨月后被拦截开网的卡能自动恢复开网。
+// 设备/worker 不存在或 ICCID 未就绪时静默跳过。
+func (p *Pool) ReapplyCardPolicy(deviceID, reason string) {
+	if p == nil {
+		return
+	}
+	w := p.GetWorker(deviceID)
+	if w == nil {
+		return
+	}
+	p.resolveAndApplyPolicy(w, reason)
 }

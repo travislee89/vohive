@@ -352,6 +352,16 @@ export type SMSContact = {
   local_phone?: string  // 本机号码（收件人手机号）
 }
 
+export type CardPolicyQuotaUsage = {
+  used_bytes: number
+  period_start?: string
+  period_end?: string
+  exceeded: boolean
+  threshold_bytes: number
+  quota_bytes: number
+  auto_stop_enabled: boolean
+}
+
 export type CardPolicy = {
   iccid: string
   network_enabled: boolean
@@ -361,6 +371,13 @@ export type CardPolicy = {
   apn: string
   source: 'auto' | 'user'
   updated_at?: string
+  quota_enabled: boolean
+  quota_bytes: number
+  billing_day: number
+  billing_timezone: string
+  auto_stop_enabled: boolean
+  auto_stop_threshold_bytes: number
+  quota_usage?: CardPolicyQuotaUsage
 }
 
 export type NotificationSettings = {

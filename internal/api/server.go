@@ -927,6 +927,18 @@ func (s *Server) handleDeviceMgmtStartNetwork(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "VoWiFi 运行中，无法启动数据网络"})
 		return
 	}
+	// 流量限制兜底拦截（防直调该端点绕过 route_adapters 的拦截）
+	if iccid := worker.CurrentICCID(); iccid != "" {
+		if pol, perr := db.GetCardPolicy(iccid); perr == nil && pol.QuotaEnabled && pol.AutoStopEnabled {
+			if qr := db.IsCardQuotaExceeded(iccid, pol.QuotaBytes, pol.AutoStopThresholdBytes, true, pol.BillingDay, pol.BillingTimezone, time.Now()); qr.Exceeded {
+				c.JSON(http.StatusForbidden, gin.H{
+					"status":  "error",
+					"message": "本计费周期流量已达上限，已自动拦截开网",
+				})
+				return
+			}
+		}
+	}
 	if err := worker.StartNetwork(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "启动数据网络失败: " + err.Error()})
 		return

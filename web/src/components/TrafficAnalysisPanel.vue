@@ -135,7 +135,15 @@ async function ensureChartLoaded() {
   }
 }
 
-const analysisBuckets = computed(() => props.analysis.buckets || [])
+const analysisBuckets = computed(() => {
+  const buckets = props.analysis.buckets || []
+  // 按时间倒序展示（最新周期在前）。优先用 period_start，缺失回退到 bucket 字符串。
+  return [...buckets].sort((a, b) => {
+    const ka = String(a.period_start || a.bucket || '')
+    const kb = String(b.period_start || b.bucket || '')
+    return kb.localeCompare(ka)
+  })
+})
 const analysisChartData = computed(() => props.analysis.chart)
 
 function formatBytes(bytes: unknown) {

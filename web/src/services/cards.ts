@@ -7,6 +7,12 @@ type PutCardPolicyRequest = {
   vowifi_enabled?: boolean
   ip_version?: string
   apn?: string
+  quota_enabled?: boolean
+  quota_bytes?: number
+  billing_day?: number
+  billing_timezone?: string
+  auto_stop_enabled?: boolean
+  auto_stop_threshold_bytes?: number
 }
 
 export const cardsService = {

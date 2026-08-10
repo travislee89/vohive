@@ -47,6 +47,7 @@ type workerInterface struct {
 	source       string
 	networkReady func() bool
 	readCounters func(context.Context) (trafficCounters, error)
+	currentICCID func() string
 }
 
 type trafficCounters struct {
@@ -144,7 +145,22 @@ func (s *Sampler) sample(periodStart time.Time) {
 			db.TrafficPoint{PeriodStart: periodStart, Resource: "iface", Tag: ifaceBaselineKey(wi.id, wi.iface), Direction: false, TrafficBytes: drx},
 			db.TrafficPoint{PeriodStart: periodStart, Resource: "iface", Tag: ifaceBaselineKey(wi.id, wi.iface), Direction: true, TrafficBytes: dtx},
 		)
+		// 累加到 per-ICCID 卡流量用量（仅当该卡启用了流量限制时）
+		if wi.currentICCID != nil {
+			if iccid := strings.TrimSpace(wi.currentICCID()); iccid != "" {
+				if pol, perr := db.GetCardPolicy(iccid); perr == nil && pol.QuotaEnabled {
+					if _, aerr := db.AccumulateCardQuotaUsage(iccid, drx+dtx, pol.BillingDay, pol.BillingTimezone, periodStart.Add(time.Minute)); aerr != nil {
+						logger.Warn("累加卡流量用量失败", "iccid", iccid, "err", aerr)
+					}
+				}
+			}
+		}
 	}
+
+	// 流量限制周期 rollover 协调：对启用流量限制且存储意图为开网的卡，
+	// 若其用量行已不在当前计费周期（跨月），重置用量并重投影策略，
+	// 使跨计费月后被拦截的卡能自动恢复开网（无需独立 cron）。
+	s.reconcileCardQuota(periodStart.Add(time.Minute))
 
 	if s.mgr != nil {
 		snaps := s.mgr.SnapshotAndResetTraffic()
@@ -238,13 +254,14 @@ func (s *Sampler) poolWorkerInterfaces() []workerInterface {
 		networkReady := func() bool {
 			return worker.Config.NetworkEnabled && worker.NetworkConnected()
 		}
+		currentICCID := worker.CurrentICCID
 		var readCounters func(context.Context) (trafficCounters, error)
 		if qmiCore := worker.QMICore; qmiCore != nil {
 			readCounters = func(ctx context.Context) (trafficCounters, error) {
 				return readQMIWDSTrafficCounters(ctx, qmiCore)
 			}
 		}
-		out = append(out, workerInterface{id: id, iface: iface, source: trafficCounterSourceQMIWDS, networkReady: networkReady, readCounters: readCounters})
+		out = append(out, workerInterface{id: id, iface: iface, source: trafficCounterSourceQMIWDS, networkReady: networkReady, readCounters: readCounters, currentICCID: currentICCID})
 	}
 	return out
 }
@@ -303,4 +320,50 @@ func (s *Sampler) logCounterReadError(deviceID string, iface string, source stri
 	}
 	s.ifaceReadErrLog[key] = now
 	logger.Warn("流量采样读取计数器失败", "device", deviceID, "interface", iface, "source", source, "err", err)
+}
+
+// reconcileCardQuota 每分钟由采样循环调用，处理流量限制的计费周期 rollover：
+// 对启用流量限制(QuotaEnabled)且存储意图为开网(NetworkEnabled)的卡，
+// 若其用量行已不在当前计费周期（说明已跨月），则重置用量行到新周期并触发策略重投影，
+// 使新周期里被拦截开网的卡能自动恢复。该逻辑覆盖设备一直在线跨月的场景；
+// 设备重启/SIM 状态变化等场景由 resolveAndApplyPolicy 自行处理。
+func (s *Sampler) reconcileCardQuota(now time.Time) {
+	if s == nil {
+		return
+	}
+	for _, wi := range s.workerInterfaces() {
+		if wi.id == "" || wi.currentICCID == nil {
+			continue
+		}
+		iccid := strings.TrimSpace(wi.currentICCID())
+		if iccid == "" {
+			continue
+		}
+		pol, perr := db.GetCardPolicy(iccid)
+		if perr != nil || !pol.QuotaEnabled || !pol.NetworkEnabled {
+			continue
+		}
+		_, currentEnd := db.BillingPeriodFor(now, pol.BillingDay, pol.BillingTimezone)
+		row, rerr := db.GetCardQuotaUsage(iccid)
+		needReset := false
+		if rerr == nil {
+			if !row.PeriodEnd.IsZero() && !row.PeriodEnd.Equal(currentEnd) {
+				needReset = true
+			}
+		} else if errors.Is(rerr, db.ErrCardQuotaUsageNotFound) {
+			// 用量行不存在：若卡意图开网却被拦截（从未累计过用量），
+			// 建一个新周期空行并触发重投影以解除拦截。
+			needReset = true
+		}
+		if !needReset {
+			continue
+		}
+		if _, aerr := db.AccumulateCardQuotaUsage(iccid, 0, pol.BillingDay, pol.BillingTimezone, now); aerr != nil {
+			logger.Warn("重置卡流量用量周期失败", "iccid", iccid, "err", aerr)
+			continue
+		}
+		if s.pool != nil {
+			s.pool.ReapplyCardPolicy(wi.id, "quota_rollover")
+		}
+	}
 }
