@@ -254,6 +254,7 @@ const checkingUpdate = ref(false)
 const applyingUpdate = ref(false)
 const updateInfo = ref<UpdateInfo | null>(null)
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- 检查更新按钮已暂时隐藏，功能代码保留以便后续恢复
 async function doCheckUpdate() {
   checkingUpdate.value = true
   try {
@@ -270,7 +271,6 @@ async function doCheckUpdate() {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- 检查更新按钮已暂时隐藏，功能代码保留以便后续恢复
 async function doApplyUpdate() {
   if (!updateInfo.value) return
 
