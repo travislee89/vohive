@@ -2192,42 +2192,17 @@ func (m *Manager) CheckAndEnableUAC() (bool, error) {
 		return false, err
 	}
 
-	// 查找 +QCFG: "usbcfg" 或 +QCFG: "USBCFG"
-	idx := strings.Index(strings.ToLower(resp), `+qcfg: "usbcfg",`)
-	if idx == -1 {
-		return false, nil // 可能不支持该指令或格式不匹配
+	newCmd, modified := BuildUSBCFGEnableCmd(resp)
+	if !modified {
+		logger.Debug(fmt.Sprintf("[%s] UAC 接口已处于开启状态或模组不支持该指令，无需更改", m.cfg.ID))
+		return false, nil
 	}
 
-	start := idx + 7 // Skip "+QCFG: " (7 chars)
-	line := resp[start:]
-	if end := strings.IndexAny(line, "\r\n"); end != -1 {
-		line = line[:end]
+	logger.Info(fmt.Sprintf("[%s] 检测到 UAC 接口未开启，正在通过 %s 执行开启", m.cfg.ID, newCmd))
+	if _, err := m.ExecuteAT(newCmd, 3*time.Second); err != nil {
+		return false, fmt.Errorf("动态开启 UAC 失败: %w", err)
 	}
-	line = strings.TrimSpace(line)
-
-	// line 例: "usbcfg",0x2C7C,0x0125,1,1,1,1,1,0,0
-	parts := strings.Split(line, ",")
-	if len(parts) < 8 {
-		return false, nil // 参数过少跳过
-	}
-
-	lastIdx := len(parts) - 1
-	lastVal := strings.TrimSpace(parts[lastIdx])
-
-	if lastVal == "0" {
-		parts[lastIdx] = "1"
-		newArgs := strings.Join(parts, ",")
-		newCmd := fmt.Sprintf(`AT+QCFG=%s`, newArgs)
-		logger.Info(fmt.Sprintf("[%s] 检测到 UAC 接口未开启，正在通过 %s 执行开启", m.cfg.ID, newCmd))
-		_, err := m.ExecuteAT(newCmd, 3*time.Second)
-		if err != nil {
-			return false, fmt.Errorf("动态开启 UAC 失败: %w", err)
-		}
-		return true, nil
-	} else {
-		logger.Debug(fmt.Sprintf("[%s] UAC 接口已处于开启状态 (%s)，无需重启", m.cfg.ID, lastVal))
-	}
-	return false, nil
+	return true, nil
 }
 
 // EnableUSBAudio 开启 USB Audio UAC 模式。

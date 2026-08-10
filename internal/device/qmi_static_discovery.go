@@ -731,9 +731,30 @@ func sortTTYPaths(paths []string) {
 
 // findAudioDevice 在同一 USB 复合设备下关联 ALSA 声卡信息。
 // 这样上层就能把 modem 控制面和同设备的 USB Audio 能力关联起来。
+//
+// 部分机型（如 Quectel EC25/EG25 等）把 sound 节点挂在 USB 父设备目录下
+// （<usbPath>/sound/card*），而非接口子目录（<usbPath>/<usbName>:1.*/sound/card*）。
+// 因此这里优先查父设备，再回退到接口子目录，两种布局都兼容。
 func findAudioDevice(usbPath string) (string, int) {
 	usbName := filepath.Base(usbPath)
+
+	// 1. 优先：父设备目录下的 sound/card*
+	if dev, num := findAudioCardByGlob(filepath.Join(usbPath, "sound", "card*")); dev != "" {
+		return dev, num
+	}
+
+	// 2. 回退：接口子目录下的 sound/card*
 	pattern := filepath.Join(usbPath, usbName+":1.*", "sound", "card*")
+	if dev, num := findAudioCardByGlob(pattern); dev != "" {
+		return dev, num
+	}
+
+	return "", -1
+}
+
+// findAudioCardByGlob 对给定 glob 模式匹配 sound 卡节点，返回 ALSA 设备名（如 hw:0,0）和卡号。
+// 匹配为空或卡号解析失败时返回 ("", -1)。
+func findAudioCardByGlob(pattern string) (string, int) {
 	matches, err := filepath.Glob(pattern)
 	if err != nil || len(matches) == 0 {
 		return "", -1
@@ -749,8 +770,7 @@ func findAudioDevice(usbPath string) (string, int) {
 		return "", -1
 	}
 
-	alsaDev := fmt.Sprintf("hw:%d,0", cardNum)
-	return alsaDev, cardNum
+	return fmt.Sprintf("hw:%d,0", cardNum), cardNum
 }
 
 // String 返回便于日志输出的简短设备描述。

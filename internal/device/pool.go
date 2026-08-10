@@ -184,6 +184,9 @@ type Pool struct {
 	// SIP 注册器 (用于 CS 域语音桥接查路由)
 	sipRegistrar *sipgw.Registrar
 	voiceGateway *voicehost.Gateway
+	// uacAttempted 记录同一进程内已尝试过开启 UAC 的设备 ID，避免模组重启恢复
+	// 期间重复触发（每次重建 worker 都重新进入 bootstrap）。进程重启后清空。
+	uacAttempted map[string]bool
 
 	// VoWiFi host 侧整合（多实例）
 	vowifiHost         *vowifihost.Manager
@@ -221,6 +224,7 @@ func NewPool(cfg *config.Config) *Pool {
 		workerGenerations:     make(map[string]uint64),
 		modemRebootRecovering: make(map[string]bool),
 		modemRebootWakeups:    make(map[string]chan struct{}),
+		uacAttempted:          make(map[string]bool),
 		cfg:                   cfg,
 		ctx:                   ctx,
 		cancel:                cancel,
