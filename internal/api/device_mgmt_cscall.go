@@ -62,16 +62,24 @@ func cscallCallInfosToDTOs(calls []cscall.CallInfo) []cscallCallInfoDTO {
 }
 
 // resolveCSCallManager 根据 device_id 获取对应的 CSCall 管理器。
-// 返回 (manager, worker, err)：
-//   - worker == nil：设备不存在
-//   - worker != nil 且 manager == nil：设备存在但呼叫控制(CSCallMgr)未初始化
+// 返回 (manager, err)：
+//   - worker 不存在：errDeviceNotFound
+//   - worker 存在但 CSCallMgr 为 nil：携带具体根因的 cscallLookupError（见 Pool.CSCallNotInitializedReason）
 func (s *Server) resolveCSCallManager(deviceID string) (*cscall.Manager, error) {
 	w := s.pool.GetWorker(deviceID)
 	if w == nil {
 		return nil, errDeviceNotFound
 	}
 	if w.CSCallMgr == nil {
-		return nil, errCSCallNotInitialized
+		reason := s.pool.CSCallNotInitializedReason(deviceID)
+		if reason == "" {
+			reason = errCSCallNotInitialized.Hint
+		}
+		return nil, cscallLookupError{
+			Status:  http.StatusNotFound,
+			Message: errCSCallNotInitialized.Message,
+			Hint:    reason,
+		}
 	}
 	return w.CSCallMgr, nil
 }
@@ -91,6 +99,8 @@ var (
 		Message: "设备未找到",
 		Hint:    "请确认设备 ID 是否正确且设备已接入系统。",
 	}
+	// errCSCallNotInitialized 仅作为 message/fallback hint 模板使用；
+	// 实际返回的 hint 会被 Pool.CSCallNotInitializedReason 给出的具体根因覆盖。
 	errCSCallNotInitialized = cscallLookupError{
 		Status:  http.StatusNotFound,
 		Message: "呼叫控制未初始化",
