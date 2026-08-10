@@ -15,8 +15,20 @@ GO_BUILD = go build -trimpath -buildvcs=false -tags "$(GO_TAGS)" -ldflags "$(LDF
 AMD64_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_amd64
 ARM64_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_arm64
 ARMV7_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_armv7
+# 压缩二进制：UPX 存在时启用，不存在时跳过（不影响编译）。
+# 由调用方显式禁用（如 CI 的 disable-upx-by-default）或设置 UPX= 可跳过。
 UPX ?= $(shell command -v upx || command -v upx-ucl)
 UPX_FLAGS ?= --best --lzma
+
+# compress-if-upx 当 UPX 可用时压缩目标二进制，否则打印提示并跳过。
+define compress-if-upx
+	@if [ -n "$(UPX)" ]; then \
+		echo "→ 压缩 $1 ($(UPX) $(UPX_FLAGS))"; \
+		$(UPX) $(UPX_FLAGS) "$1" || { echo "警告: UPX 压缩失败，保留未压缩二进制"; }; \
+	else \
+		echo "→ 未检测到 upx，跳过压缩（二进制未压缩）: $1"; \
+	fi
+endef
 
 .PHONY: all ci build build-amd64 build-arm64 build-armv7 build-all frontend-dist clean
 
@@ -37,22 +49,19 @@ frontend-dist:
 	cp -R web/dist internal/web/dist
 
 build-amd64: frontend-dist
-	@test -n "$(UPX)" || { echo "错误: 需要安装 upx"; exit 1; }
 	mkdir -p $(DIST_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=amd64 $(GO_BUILD) -o $(AMD64_OUT) $(MAIN_PACKAGE)
-	$(UPX) $(UPX_FLAGS) $(AMD64_OUT)
+	$(call compress-if-upx,$(AMD64_OUT))
 
 build-arm64: frontend-dist
-	@test -n "$(UPX)" || { echo "错误: 需要安装 upx"; exit 1; }
 	mkdir -p $(DIST_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=arm64 $(GO_BUILD) -o $(ARM64_OUT) $(MAIN_PACKAGE)
-	$(UPX) $(UPX_FLAGS) $(ARM64_OUT)
+	$(call compress-if-upx,$(ARM64_OUT))
 
 build-armv7: frontend-dist
-	@test -n "$(UPX)" || { echo "错误: 需要安装 upx"; exit 1; }
 	mkdir -p $(DIST_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=arm GOARM=7 $(GO_BUILD) -o $(ARMV7_OUT) $(MAIN_PACKAGE)
-	$(UPX) $(UPX_FLAGS) $(ARMV7_OUT)
+	$(call compress-if-upx,$(ARMV7_OUT))
 
 clean:
 	go clean
