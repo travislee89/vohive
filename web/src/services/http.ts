@@ -17,12 +17,14 @@ export function toAppError(err: unknown): AppError {
         message = obj.error
       }
       const code = typeof obj.code === 'string' ? obj.code : undefined
+      const hint = typeof obj.hint === 'string' ? obj.hint : undefined
       return {
         message,
         status,
         method: err.config?.method,
         url: err.config?.url,
-        code: code || err.code
+        code: code || err.code,
+        hint
       }
     }
     return {

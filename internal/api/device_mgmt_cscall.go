@@ -61,21 +61,54 @@ func cscallCallInfosToDTOs(calls []cscall.CallInfo) []cscallCallInfoDTO {
 	return out
 }
 
-// resolveCSCallManager 根据 device_id 获取对应的 CSCall 管理器
-func (s *Server) resolveCSCallManager(deviceID string) *cscall.Manager {
+// resolveCSCallManager 根据 device_id 获取对应的 CSCall 管理器。
+// 返回 (manager, worker, err)：
+//   - worker == nil：设备不存在
+//   - worker != nil 且 manager == nil：设备存在但呼叫控制(CSCallMgr)未初始化
+func (s *Server) resolveCSCallManager(deviceID string) (*cscall.Manager, error) {
 	w := s.pool.GetWorker(deviceID)
 	if w == nil {
-		return nil
+		return nil, errDeviceNotFound
 	}
-	return w.CSCallMgr
+	if w.CSCallMgr == nil {
+		return nil, errCSCallNotInitialized
+	}
+	return w.CSCallMgr, nil
 }
+
+// cscallLookupError 包含友好错误提示与诊断信息
+type cscallLookupError struct {
+	Status  int    `json:"-"`
+	Message string `json:"message"`
+	Hint    string `json:"hint,omitempty"`
+}
+
+func (e cscallLookupError) Error() string { return e.Message }
+
+var (
+	errDeviceNotFound = cscallLookupError{
+		Status:  http.StatusNotFound,
+		Message: "设备未找到",
+		Hint:    "请确认设备 ID 是否正确且设备已接入系统。",
+	}
+	errCSCallNotInitialized = cscallLookupError{
+		Status:  http.StatusNotFound,
+		Message: "呼叫控制未初始化",
+		Hint:    "需为该设备配置可用的音频设备（USB 声卡），并确保 SIP 注册器/后端控制面已就绪后重启服务。",
+	}
+)
 
 // handleDeviceMgmtCSCallList 处理 GET /devices/:device_id/calls —— 查询当前活跃呼叫列表
 func (s *Server) handleDeviceMgmtCSCallList(c *gin.Context) {
 	deviceID := deviceIDParam(c)
-	mgr := s.resolveCSCallManager(deviceID)
-	if mgr == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "设备未找到或呼叫控制未初始化"})
+	mgr, err := s.resolveCSCallManager(deviceID)
+	if err != nil {
+		lookup, ok := err.(cscallLookupError)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询呼叫控制失败"})
+			return
+		}
+		c.JSON(lookup.Status, gin.H{"error": lookup.Message, "hint": lookup.Hint})
 		return
 	}
 
@@ -95,12 +128,16 @@ func (s *Server) handleDeviceMgmtCSCallEvents(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 
 	deviceID := deviceIDParam(c)
-	mgr := s.resolveCSCallManager(deviceID)
-	if mgr == nil {
+	mgr, err := s.resolveCSCallManager(deviceID)
+	if err != nil {
+		message := err.Error()
+		if lookup, ok := err.(cscallLookupError); ok {
+			message = lookup.Message + "：" + lookup.Hint
+		}
 		c.SSEvent("cscall_event", cscallCallEventDTO{
 			Type:   "error",
 			CallID: "",
-			Number: "设备未找到或呼叫控制未初始化",
+			Number: message,
 			Ts:     time.Now().Unix(),
 		})
 		c.Writer.Flush()

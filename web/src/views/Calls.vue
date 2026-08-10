@@ -18,12 +18,12 @@ const route = useRoute()
 const router = useRouter()
 
 const devices = ref<DeviceMgmtListItem[]>([])
-const devicesError = ref<{ message: string; status?: number; method?: string; url?: string } | null>(null)
+const devicesError = ref<{ message: string; status?: number; method?: string; url?: string; hint?: string } | null>(null)
 const selectedDevice = ref<string>(typeof route.query.device === 'string' ? route.query.device : '')
 
 const loading = ref(false)
 const calls = ref<CSCallInfo[]>([])
-const callsError = ref<{ message: string; status?: number; method?: string; url?: string } | null>(null)
+const callsError = ref<{ message: string; status?: number; method?: string; url?: string; hint?: string } | null>(null)
 const lastOkAt = ref<number | null>(null)
 
 // 实时来电事件流
@@ -225,6 +225,7 @@ onUnmounted(() => {
       <div v-if="callsError" class="mb-4">
         <ErrorState
           :message="callsError.message"
+          :hint="callsError.hint"
           @retry="fetchCalls()"
         />
       </div>
