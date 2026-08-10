@@ -162,6 +162,7 @@ func Init(dbPath string) error {
 		&TrafficDay{},
 		&TrafficWeek{},
 		&TrafficMonth{},
+		&CardQuotaUsage{},
 	); err != nil {
 		return err
 	}

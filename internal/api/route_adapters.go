@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/boa-z/vohive/internal/db"
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,25 @@ func (s *Server) handleDeviceNetworkPatch(c *gin.Context) {
 			}
 			p.APN = apn
 		})
+		// 流量限制拦截：启网前查询当前卡用量，超额则拒绝开网（仅拦截，不落库，
+		// 保留 network_enabled=true 意图，下个计费周期自动恢复）。
+		if iccid != "" {
+			if pol, perr := db.GetCardPolicy(iccid); perr == nil && pol.QuotaEnabled && pol.AutoStopEnabled {
+				if qr := db.IsCardQuotaExceeded(iccid, pol.QuotaBytes, pol.AutoStopThresholdBytes, true, pol.BillingDay, pol.BillingTimezone, time.Now()); qr.Exceeded {
+					c.JSON(http.StatusForbidden, gin.H{
+						"status":  "error",
+						"message": "本计费周期流量已达上限，已自动拦截开网",
+						"quota_usage": gin.H{
+							"used_bytes":      qr.UsedBytes,
+							"threshold_bytes": qr.Threshold,
+							"period_start":    qr.PeriodStart,
+							"period_end":      qr.PeriodEnd,
+						},
+					})
+					return
+				}
+			}
+		}
 		// 同步 w.Config，使概览读到最新值（QMI APN 在下次连接时生效）
 		if iccid != "" {
 			s.pool.SetWorkerNetworkPolicy(deviceID, true, ipVersion, apn)

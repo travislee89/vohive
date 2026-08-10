@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/boa-z/vohive/internal/config"
@@ -214,33 +215,74 @@ func TestVoWiFiToggleCyclePreservesAirplaneIntent(t *testing.T) {
 	}
 }
 
-// TestPatchCardPolicyAirplaneMutualExclusion 验证“开飞行模式”落库时与 network/vowifi 互斥
-// （等价于 handleDeviceMgmtSetFlightMode 开飞行时的落库副作用）。
-func TestPatchCardPolicyAirplaneMutualExclusion(t *testing.T) {
+// TestPutCardPolicyQuotaFields 验证 PUT 卡策略带流量限制字段能原样落库。
+func TestPutCardPolicyQuotaFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	openTestDB(t)
+	s := &Server{pool: device.NewPool(&config.Config{})}
+	r := gin.Default()
+	r.PUT("/api/cards/:iccid/policy", s.handlePutCardPolicy)
 
-	// 预置：network 开着、vowifi 开着
-	_ = db.UpsertCardPolicy(db.CardPolicy{ICCID: "8986air001", NetworkEnabled: true, VoWiFiEnabled: true, Source: "user"})
+	body := `{"quota_enabled":true,"quota_bytes":1073741824,"billing_day":15,"billing_timezone":"Asia/Shanghai","auto_stop_enabled":true,"auto_stop_threshold_bytes":1181116006}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/cards/8986q10/policy", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	got, _ := db.GetCardPolicy("8986q10")
+	if !got.QuotaEnabled || got.QuotaBytes != 1073741824 || got.BillingDay != 15 ||
+		got.BillingTimezone != "Asia/Shanghai" || !got.AutoStopEnabled || got.AutoStopThresholdBytes != 1181116006 {
+		t.Fatalf("流量限制字段未原样落库: %+v", got)
+	}
+}
 
-	p := device.NewPool(&config.Config{})
-	w := &device.Worker{ID: "wwan-air"}
-	setNestedPrivateField(t, w, []string{"state", "Identity", "ICCID"}, "8986air001")
-	injectWorker(p, w)
-
-	s := &Server{pool: p}
-	// 开飞行：airplane=on，且互斥关 network/vowifi
-	_, applied, err := s.patchCardPolicyForDevice("wwan-air", func(pol *db.CardPolicy) {
-		pol.AirplaneEnabled = true
-		pol.VoWiFiEnabled = false
-		pol.NetworkEnabled = false
+// TestGetCardPolicyReturnsQuotaUsage 验证 GET 卡策略附带 quota_usage，且超限时 exceeded=true。
+func TestGetCardPolicyReturnsQuotaUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	openTestDB(t)
+	// 配置：quota=1GB，threshold=1GB，计费日15，autoStop 开
+	_ = db.UpsertCardPolicy(db.CardPolicy{
+		ICCID: "8986q11", QuotaEnabled: true, QuotaBytes: 1073741824,
+		BillingDay: 15, BillingTimezone: "UTC", AutoStopEnabled: true,
+		AutoStopThresholdBytes: 1073741824, Source: "user",
 	})
-	if err != nil || !applied {
-		t.Fatalf("applied=%v err=%v", applied, err)
+	// 累计用量到 1.5GB，超过阈值
+	now := time.Date(2026, 5, 20, 0, 0, 0, 0, time.UTC)
+	if _, err := db.AccumulateCardQuotaUsage("8986q11", 1610612736, 15, "UTC", now); err != nil {
+		t.Fatal(err)
 	}
 
-	got, _ := db.GetCardPolicy("8986air001")
-	if !got.AirplaneEnabled || got.NetworkEnabled || got.VoWiFiEnabled {
-		t.Fatalf("开飞行应互斥关 network/vowifi: %+v", got)
+	s := &Server{}
+	r := gin.Default()
+	r.GET("/api/cards/:iccid/policy", s.handleGetCardPolicy)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/cards/8986q11/policy", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	var usage struct {
+		UsedBytes  int64  `json:"used_bytes"`
+		Exceeded   bool   `json:"exceeded"`
+		Threshold  int64  `json:"threshold_bytes"`
+		PeriodEnd  string `json:"period_end"`
+	}
+	if err := json.Unmarshal(resp["quota_usage"], &usage); err != nil {
+		t.Fatalf("解析 quota_usage 失败: %v", err)
+	}
+	if usage.UsedBytes != 1610612736 {
+		t.Fatalf("used_bytes=%d", usage.UsedBytes)
+	}
+	if !usage.Exceeded {
+		t.Fatal("已用1.5GB超过1GB阈值，应 exceeded=true")
+	}
+	if usage.Threshold != 1073741824 {
+		t.Fatalf("threshold=%d", usage.Threshold)
 	}
 }

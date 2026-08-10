@@ -2,8 +2,11 @@
 import { computed, ref, watch } from 'vue'
 import { Sim24Regular } from '@vicons/fluent'
 import { Loading } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import type { CardPolicy } from '../types/api'
 import { devicesService } from '../services/devices'
+import { cardsService } from '../services/cards'
+import { errorMessage } from '../services/http'
 
 const props = defineProps<{
   deviceId: string | undefined
@@ -35,6 +38,51 @@ const vowifiFailed = ref(false)
 const airplanePending = ref(false)
 const airplaneFailed = ref(false)
 
+// ===== 流量限制编辑状态 =====
+// 编辑用「数值 + 单位」组合，保存时换算成字节；展示用从 policy.quota_usage 读。
+type SizeUnit = 'MB' | 'GB' | 'TB'
+const UNIT_BYTES: Record<SizeUnit, number> = { MB: 1024 * 1024, GB: 1024 * 1024 * 1024, TB: 1024 * 1024 * 1024 * 1024 }
+const COMMON_TZ = ['Asia/Shanghai', 'Asia/Tokyo', 'Asia/Hong_Kong', 'Asia/Singapore', 'Asia/Bangkok', 'Europe/London', 'America/New_York', 'UTC', '']
+
+const quota = ref({
+  enabled: false,
+  sizeValue: 1,          // 套餐流量数值
+  sizeUnit: 'GB' as SizeUnit,
+  billingDay: 1,         // 计费日 1-31
+  billingTimezone: '',   // 空串=跟随系统时区
+  autoStopEnabled: false,
+  autoStopValue: 1,       // 使用量阈值数值（与套餐流量独立）
+  autoStopUnit: 'GB' as SizeUnit,
+})
+const quotaSaving = ref(false)
+
+// 从字节反解出 {数值, 单位} 供编辑回填（取最大适配单位）
+function splitBytes(bytes: number): { value: number; unit: SizeUnit } {
+  const v = Number(bytes) || 0
+  if (v >= UNIT_BYTES.TB) return { value: +(v / UNIT_BYTES.TB).toFixed(2), unit: 'TB' }
+  if (v >= UNIT_BYTES.GB) return { value: +(v / UNIT_BYTES.GB).toFixed(2), unit: 'GB' }
+  if (v >= UNIT_BYTES.MB) return { value: +(v / UNIT_BYTES.MB).toFixed(2), unit: 'MB' }
+  return { value: 0, unit: 'MB' }
+}
+
+function formatBytesLocal(bytes: number): string {
+  const v = Number(bytes) || 0
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let val = v
+  let i = 0
+  while (val >= 1024 && i < units.length - 1) {
+    val /= 1024
+    i++
+  }
+  return `${val.toFixed(i === 0 ? 0 : 2)} ${units[i]}`
+}
+
+function formatPeriod(ts?: string): string {
+  if (!ts) return '--'
+  const d = new Date(ts)
+  return Number.isFinite(d.getTime()) ? d.toLocaleDateString() : '--'
+}
+
 // 上游 policy 变化时原地同步各字段（不整体替换对象，避免 el-switch 崩溃）
 watch(
   () => props.policy,
@@ -49,6 +97,17 @@ watch(
     networkFailed.value = false
     vowifiFailed.value = false
     airplaneFailed.value = false
+    // 同步流量限制编辑状态
+    quota.value.enabled = !!p.quota_enabled
+    const qs = splitBytes(p.quota_bytes || 0)
+    quota.value.sizeValue = qs.value > 0 ? qs.value : 1
+    quota.value.sizeUnit = qs.unit
+    quota.value.billingDay = p.billing_day || 1
+    quota.value.billingTimezone = p.billing_timezone || ''
+    quota.value.autoStopEnabled = !!p.auto_stop_enabled
+    const as = splitBytes(p.auto_stop_threshold_bytes || 0)
+    quota.value.autoStopValue = as.value > 0 ? as.value : qs.value > 0 ? qs.value : 1
+    quota.value.autoStopUnit = as.value > 0 ? as.unit : qs.unit
   },
   { immediate: true }
 )
@@ -60,9 +119,50 @@ const sourceLabel = computed(() => {
 
 const canToggle = computed(() => props.deviceOnline && !!props.iccid)
 
+// 流量限制用量展示
+const quotaUsage = computed(() => props.policy?.quota_usage)
+const quotaBytes = computed(() => props.policy?.quota_bytes || 0)
+const thresholdBytes = computed(() => quotaUsage.value?.threshold_bytes || quotaBytes.value || 0)
+const usedBytes = computed(() => quotaUsage.value?.used_bytes || 0)
+const usedPercent = computed(() => {
+  const total = thresholdBytes.value
+  if (total <= 0) return 0
+  return Math.min(100, Math.round((usedBytes.value / total) * 100))
+})
+const quotaExceeded = computed(() => !!quotaUsage.value?.exceeded)
+
+async function saveQuota() {
+  if (!props.iccid) return
+  quotaSaving.value = true
+  const result = await cardsService.putPolicy(props.iccid, {
+    quota_enabled: quota.value.enabled,
+    quota_bytes: quota.value.enabled ? Math.round(quota.value.sizeValue * UNIT_BYTES[quota.value.sizeUnit]) : 0,
+    billing_day: quota.value.billingDay,
+    billing_timezone: quota.value.billingTimezone,
+    auto_stop_enabled: quota.value.autoStopEnabled,
+    auto_stop_threshold_bytes: quota.value.autoStopEnabled
+      ? Math.round(quota.value.autoStopValue * UNIT_BYTES[quota.value.autoStopUnit])
+      : 0,
+  })
+  quotaSaving.value = false
+  if (!result.ok) {
+    ElMessage.error(errorMessage(result.error, '保存流量限制失败'))
+    return
+  }
+  ElMessage.success('流量限制已保存')
+  emit('policyChanged')
+}
+
 async function onNetworkToggle(rawVal: string | number | boolean) {
   const val = rawVal as boolean
   if (!props.deviceId || !canToggle.value) return
+  // 开网前：若流量已超限，前端先拦截并回滚
+  if (val && quotaExceeded.value) {
+    ElMessage.warning('本计费周期流量已达上限，无法开启网络')
+    local.value.network_enabled = false
+    networkFailed.value = true
+    return
+  }
   networkPending.value = true
   networkFailed.value = false
   const prev = !val
@@ -79,6 +179,10 @@ async function onNetworkToggle(rawVal: string | number | boolean) {
   if (!result.ok) {
     local.value.network_enabled = prev
     networkFailed.value = true
+    // 流量超限的后端 403 提示
+    if (result.error?.status === 403) {
+      ElMessage.warning(result.error.message || '本计费周期流量已达上限')
+    }
   } else {
     networkFailed.value = false
     // 开网络与 vowifi/飞行互斥（后端已互斥落库，这里同步 UI）
@@ -261,6 +365,94 @@ async function onAirplaneToggle(rawVal: string | number | boolean) {
 
 
       </div>
+      <!-- 流量限制 -->
+      <div class="ui-panel-muted p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">流量限制</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">按卡(ICCID)统计，跨计费周期自动重置</div>
+          </div>
+          <el-switch v-model="quota.enabled" :disabled="!iccid" />
+        </div>
+
+        <div v-show="quota.enabled" class="space-y-3">
+          <!-- 套餐流量 + 阈值（并排各占一半） -->
+          <div class="grid grid-cols-2 gap-2">
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">套餐流量</label>
+              <div class="flex gap-2">
+                <el-input-number v-model="quota.sizeValue" :min="0" :step="1" :controls="false" class="w-full" />
+                <el-select v-model="quota.sizeUnit" class="w-20 shrink-0">
+                  <el-option label="MB" value="MB" />
+                  <el-option label="GB" value="GB" />
+                  <el-option label="TB" value="TB" />
+                </el-select>
+              </div>
+            </div>
+            <div v-show="quota.autoStopEnabled" class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">达到使用量阈值</label>
+              <div class="flex gap-2">
+                <el-input-number v-model="quota.autoStopValue" :min="0" :step="1" :controls="false" class="w-full" />
+                <el-select v-model="quota.autoStopUnit" class="w-20 shrink-0">
+                  <el-option label="MB" value="MB" />
+                  <el-option label="GB" value="GB" />
+                  <el-option label="TB" value="TB" />
+                </el-select>
+              </div>
+            </div>
+          </div>
+
+          <!-- 计费日 + 时区 -->
+          <div class="grid grid-cols-2 gap-2">
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">计费日</label>
+              <el-input-number v-model="quota.billingDay" :min="1" :max="31" :controls="false" class="w-full" />
+              <div class="text-xs text-gray-400">每月 1-31 日，无该日取月底</div>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">计费时区</label>
+              <el-select v-model="quota.billingTimezone" filterable allow-create clearable placeholder="跟随系统" class="w-full">
+                <el-option label="跟随系统" value="" />
+                <el-option v-for="tz in COMMON_TZ" :key="tz" :label="tz" :value="tz" />
+              </el-select>
+              <div class="text-xs text-gray-400">可输入 IANA 名，如 Asia/Shanghai</div>
+            </div>
+          </div>
+
+          <!-- 达到使用量后关闭网络 -->
+          <div class="space-y-1 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-bold text-gray-800 dark:text-gray-100">达到使用量后关闭网络</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">阈值独立于套餐流量，可留出漏记余量</div>
+              </div>
+              <el-switch v-model="quota.autoStopEnabled" />
+            </div>
+          </div>
+
+          <!-- 当前用量 -->
+          <div v-if="quotaUsage" class="space-y-1">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-500 dark:text-gray-400">本计费周期已用</span>
+              <span class="font-mono" :class="quotaExceeded ? 'text-red-500 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'">
+                {{ formatBytesLocal(usedBytes) }} / {{ formatBytesLocal(thresholdBytes) }}
+              </span>
+            </div>
+            <el-progress :percentage="usedPercent" :status="quotaExceeded ? 'exception' : 'success'" :stroke-width="10" />
+            <div class="text-xs text-gray-400">
+              计费周期：{{ formatPeriod(quotaUsage.period_start) }} ~ {{ formatPeriod(quotaUsage.period_end) }}
+            </div>
+          </div>
+
+          <!-- 保存按钮 -->
+          <div class="flex justify-end">
+            <el-button type="primary" size="small" :loading="quotaSaving" :disabled="!iccid" @click="saveQuota">
+              保存流量限制
+            </el-button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>

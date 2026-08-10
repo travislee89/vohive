@@ -10,16 +10,30 @@ import (
 )
 
 // CardPolicy 是跟随卡(ICCID)走的可配置策略。SMS 恒开、SMSC 动态取，均不在此。
+//
+// 流量限制字段（跟卡走，per-ICCID）：
+//   - QuotaBytes:             套餐流量上限（字节）。0 表示未设套餐流量。
+//   - BillingDay:             计费日（1-31）。0 表示未设，按自然月起始计。
+//   - BillingTimezone:        计费时区（IANA 名或 UTC 偏移如 "+08:00"）。空串表示跟随系统时区。
+//   - AutoStopEnabled:        达到使用量阈值后是否自动关闭/拦截网络的开关。
+//   - AutoStopThresholdBytes: 触发自动关闭的「使用量阈值」（字节），与 QuotaBytes 独立。
+//                             通常略大于 QuotaBytes，留出漏记流量的余量。0 表示未设阈值。
 type CardPolicy struct {
-	ICCID           string    `gorm:"column:iccid;primaryKey" json:"iccid"`
-	NetworkEnabled  bool      `gorm:"column:network_enabled" json:"network_enabled"`
-	VoWiFiEnabled   bool      `gorm:"column:vowifi_enabled" json:"vowifi_enabled"`
-	AirplaneEnabled bool      `gorm:"column:airplane_enabled" json:"airplane_enabled"`
-	IPVersion       string    `gorm:"column:ip_version" json:"ip_version"`
-	APN             string    `gorm:"column:apn" json:"apn"`
-	Source          string    `gorm:"column:source" json:"source"` // auto | user
-	CreatedAt       time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt       time.Time `gorm:"column:updated_at" json:"updated_at"`
+	ICCID                string    `gorm:"column:iccid;primaryKey" json:"iccid"`
+	NetworkEnabled       bool      `gorm:"column:network_enabled" json:"network_enabled"`
+	VoWiFiEnabled        bool      `gorm:"column:vowifi_enabled" json:"vowifi_enabled"`
+	AirplaneEnabled      bool      `gorm:"column:airplane_enabled" json:"airplane_enabled"`
+	IPVersion            string    `gorm:"column:ip_version" json:"ip_version"`
+	APN                  string    `gorm:"column:apn" json:"apn"`
+	Source               string    `gorm:"column:source" json:"source"` // auto | user
+	QuotaEnabled         bool      `gorm:"column:quota_enabled" json:"quota_enabled"`
+	QuotaBytes           int64     `gorm:"column:quota_bytes" json:"quota_bytes"`
+	BillingDay           int       `gorm:"column:billing_day" json:"billing_day"`
+	BillingTimezone      string    `gorm:"column:billing_timezone" json:"billing_timezone"`
+	AutoStopEnabled      bool      `gorm:"column:auto_stop_enabled" json:"auto_stop_enabled"`
+	AutoStopThresholdBytes int64   `gorm:"column:auto_stop_threshold_bytes" json:"auto_stop_threshold_bytes"`
+	CreatedAt            time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt            time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (CardPolicy) TableName() string { return "card_policies" }
@@ -53,6 +67,20 @@ func NormalizeCardPolicy(p *CardPolicy) {
 	default:
 		p.IPVersion = "v4"
 	}
+	// 计费日裁剪到 1-31（0 表示未设）
+	if p.BillingDay < 0 {
+		p.BillingDay = 0
+	}
+	if p.BillingDay > 31 {
+		p.BillingDay = 31
+	}
+	if p.QuotaBytes < 0 {
+		p.QuotaBytes = 0
+	}
+	if p.AutoStopThresholdBytes < 0 {
+		p.AutoStopThresholdBytes = 0
+	}
+	p.BillingTimezone = strings.TrimSpace(p.BillingTimezone)
 }
 
 // ErrCardPolicyNotFound 表示 DB 中没有该 ICCID 的策略行。
@@ -89,13 +117,19 @@ func UpsertCardPolicy(p CardPolicy) error {
 	return DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "iccid"}},
 		DoUpdates: clause.Assignments(map[string]any{
-			"network_enabled":  p.NetworkEnabled,
-			"vowifi_enabled":   p.VoWiFiEnabled,
-			"airplane_enabled": p.AirplaneEnabled,
-			"ip_version":       p.IPVersion,
-			"apn":              p.APN,
-			"source":           p.Source,
-			"updated_at":       p.UpdatedAt,
+			"network_enabled":          p.NetworkEnabled,
+			"vowifi_enabled":           p.VoWiFiEnabled,
+			"airplane_enabled":         p.AirplaneEnabled,
+			"ip_version":               p.IPVersion,
+			"apn":                      p.APN,
+			"source":                   p.Source,
+			"quota_enabled":            p.QuotaEnabled,
+			"quota_bytes":              p.QuotaBytes,
+			"billing_day":              p.BillingDay,
+			"billing_timezone":         p.BillingTimezone,
+			"auto_stop_enabled":        p.AutoStopEnabled,
+			"auto_stop_threshold_bytes": p.AutoStopThresholdBytes,
+			"updated_at":               p.UpdatedAt,
 		}),
 	}).Create(&p).Error
 }

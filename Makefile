@@ -15,18 +15,16 @@ GO_BUILD = go build -trimpath -buildvcs=false -tags "$(GO_TAGS)" -ldflags "$(LDF
 AMD64_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_amd64
 ARM64_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_arm64
 ARMV7_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_armv7
-# 压缩二进制：UPX 存在时启用，不存在时跳过（不影响编译）。
+# 压缩二进制：UPX 存在时启用，不存在时静默跳过（不影响编译）。
 # 由调用方显式禁用（如 CI 的 disable-upx-by-default）或设置 UPX= 可跳过。
 UPX ?= $(shell command -v upx || command -v upx-ucl)
 UPX_FLAGS ?= --best --lzma
 
-# compress-if-upx 当 UPX 可用时压缩目标二进制，否则打印提示并跳过。
+# compress-if-upx 当 UPX 可用时压缩目标二进制，否则静默跳过。
 define compress-if-upx
 	@if [ -n "$(UPX)" ]; then \
 		echo "→ 压缩 $1 ($(UPX) $(UPX_FLAGS))"; \
 		$(UPX) $(UPX_FLAGS) "$1" || { echo "警告: UPX 压缩失败，保留未压缩二进制"; }; \
-	else \
-		echo "→ 未检测到 upx，跳过压缩（二进制未压缩）: $1"; \
 	fi
 endef
 
