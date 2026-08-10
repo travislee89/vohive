@@ -459,6 +459,14 @@ func (p *Pool) AddWorkerFromConfig(devCfg config.DeviceConfig) (*Worker, error) 
 		p.bindMBIMHealthIndications(w)
 	}
 
+	// 若 SIP 已就绪但未发现 USB 音频设备，且当前是 Quectel QMI 后端且有可用 AT 口，
+	// 异步尝试开启 USB Audio (UAC) 并自动重启模组，使声卡枚举生效。
+	// 模组重启恢复流程会重新发现 AudioDevice 并创建 CSCallMgr。
+	if p.sipRegistrar != nil && strings.TrimSpace(devCfg.AudioDevice) == "" &&
+		backendMode == backend.BackendQMI && strings.TrimSpace(devCfg.ATPort) != "" {
+		go p.enableQuectelUACAndReboot(w, devCfg.ATPort)
+	}
+
 	if p.sipRegistrar != nil {
 		w.CSCallMgr = newCSCallManagerForWorker(w, p.sipRegistrar)
 		if w.CSCallMgr != nil {
