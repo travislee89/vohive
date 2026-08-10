@@ -4,6 +4,7 @@ import { computed } from 'vue'
 const props = defineProps<{
   title?: string
   message: string
+  hint?: string
   details?: string
   statusCode?: number
   requestMethod?: string
@@ -35,6 +36,7 @@ const metaText = computed(() => {
         <div v-if="metaText" class="mt-2 text-[11px] text-red-800/60 dark:text-red-100/60 font-mono break-words">
           {{ metaText }}
         </div>
+        <div v-if="hint" class="mt-2 text-[11px] text-red-800/70 dark:text-red-100/70 break-words">{{ hint }}</div>
         <div v-if="details" class="mt-2 text-xs font-mono text-red-900/60 dark:text-red-100/60 whitespace-pre-wrap break-words">{{ details }}</div>
       </div>
       <el-button v-if="retryText" type="primary" @click="emit('retry')" class="!border-0">

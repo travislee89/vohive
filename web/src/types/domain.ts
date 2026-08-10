@@ -4,6 +4,7 @@ export type AppError = {
   method?: string
   url?: string
   code?: string
+  hint?: string
 }
 
 export type ServiceSuccess<T> = {
