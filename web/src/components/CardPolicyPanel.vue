@@ -13,6 +13,7 @@ const props = defineProps<{
   iccid: string | undefined
   policy: CardPolicy | null
   deviceOnline: boolean
+  regStatus?: number
 }>()
 
 const emit = defineEmits<{
@@ -28,7 +29,8 @@ const local = ref<{
   airplane_enabled: boolean
   ip_version: 'v4' | 'v6' | 'v4v6'
   apn: string
-}>({ network_enabled: false, vowifi_enabled: false, airplane_enabled: false, ip_version: 'v4', apn: '' })
+  roaming_data_enabled: boolean
+}>({ network_enabled: false, vowifi_enabled: false, airplane_enabled: false, ip_version: 'v4', apn: '', roaming_data_enabled: false })
 
 // 各开关的热切换中间态（pending/failed）
 const networkPending = ref(false)
@@ -37,6 +39,8 @@ const vowifiPending = ref(false)
 const vowifiFailed = ref(false)
 const airplanePending = ref(false)
 const airplaneFailed = ref(false)
+const roamingDataPending = ref(false)
+const roamingDataFailed = ref(false)
 
 // ===== 流量限制编辑状态 =====
 // 编辑用「数值 + 单位」组合，保存时换算成字节；展示用从 policy.quota_usage 读。
@@ -94,9 +98,11 @@ watch(
     local.value.airplane_enabled = p.airplane_enabled
     local.value.ip_version = p.ip_version || 'v4'
     local.value.apn = p.apn || ''
+    local.value.roaming_data_enabled = !!p.roaming_data_enabled
     networkFailed.value = false
     vowifiFailed.value = false
     airplaneFailed.value = false
+    roamingDataFailed.value = false
     // 同步流量限制编辑状态
     quota.value.enabled = !!p.quota_enabled
     const qs = splitBytes(p.quota_bytes || 0)
@@ -118,6 +124,9 @@ const sourceLabel = computed(() => {
 })
 
 const canToggle = computed(() => props.deviceOnline && !!props.iccid)
+
+// 当前 SIM 是否处于漫游注册状态（后端统一归一 RegStatus=5）
+const isRoaming = computed(() => props.regStatus === 5)
 
 // 流量限制用量展示
 const quotaUsage = computed(() => props.policy?.quota_usage)
@@ -241,6 +250,27 @@ async function onAirplaneToggle(rawVal: string | number | boolean) {
     emit('policyChanged')
   }
 }
+
+async function onRoamingDataToggle(rawVal: string | number | boolean) {
+  const val = rawVal as boolean
+  if (!props.iccid || !canToggle.value) return
+  roamingDataPending.value = true
+  roamingDataFailed.value = false
+  const prev = !val
+  const result = await cardsService.putPolicy(props.iccid, {
+    roaming_data_enabled: val,
+  })
+  roamingDataPending.value = false
+  if (!result.ok) {
+    local.value.roaming_data_enabled = prev
+    roamingDataFailed.value = true
+    ElMessage.error(errorMessage(result.error, '设置漫游数据失败'))
+  } else {
+    roamingDataFailed.value = false
+    ElMessage.success(val ? '已允许漫游数据' : '已关闭漫游数据')
+    emit('policyChanged')
+  }
+}
 </script>
 
 <template>
@@ -358,6 +388,33 @@ async function onAirplaneToggle(rawVal: string | number | boolean) {
                 v-model="local.airplane_enabled"
                 :disabled="!canToggle || local.vowifi_enabled || airplanePending"
                 @change="onAirplaneToggle"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- 漫游数据 -->
+        <div
+          class="ui-panel-muted p-3 space-y-1"
+          :class="local.roaming_data_enabled ? 'border border-blue-300 bg-blue-50/50 dark:bg-blue-900/20' : ''"
+        >
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="flex items-center gap-2">
+                <div class="text-sm font-bold text-gray-800 dark:text-gray-100">漫游数据</div>
+                <el-tag v-if="isRoaming" type="warning" size="small" effect="light">当前漫游中</el-tag>
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                关闭时，检测到 SIM 漫游将不开启蜂窝数据网络
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span v-if="roamingDataFailed" class="text-xs text-orange-500 dark:text-orange-400">未生效</span>
+              <el-icon v-if="roamingDataPending" class="animate-spin text-gray-400"><Loading /></el-icon>
+              <el-switch
+                v-model="local.roaming_data_enabled"
+                :disabled="!canToggle || roamingDataPending"
+                @change="onRoamingDataToggle"
               />
             </div>
           </div>

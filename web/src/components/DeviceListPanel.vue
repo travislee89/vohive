@@ -54,7 +54,10 @@ const registrationText = (d: DeviceMgmtListItem) => {
   const phaseText = lifecycleStatusLabel(d.lifecycle_phase)
   if (phaseText && d.lifecycle_phase !== 'online' && d.lifecycle_phase !== 'offline') return phaseText
   if (isRadioRegistered(d)) {
-    return `${d?.modem?.operator || '--'} · ${[d?.modem?.network_duplex, d?.modem?.network_mode].filter(Boolean).join(' ') || '--'}`
+    const operator = d?.modem?.operator || '--'
+    const netInfo = [d?.modem?.network_duplex, d?.modem?.network_mode].filter(Boolean).join(' ') || '--'
+    const roamingTag = d?.modem?.reg_status === 5 ? ' · 漫游' : ''
+    return `${operator} · ${netInfo}${roamingTag}`
   }
   if (!isControlOnline(d)) return '控制面恢复中'
   if (d.registration_state_label === 'searching') return '搜索网络中'

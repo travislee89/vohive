@@ -291,8 +291,17 @@ func (p *Pool) healthCheckLoop() {
 								},
 							)
 						}
+						// 记录刷新前的注册状态，用于检测漫游↔归属地切换。
+						prevRegStatus := worker.currentRegStatus()
 						_ = worker.RefreshRuntime(nil, "health_sync")
 						p.PersistRuntimeState(worker)
+						// 兜底：若定时同步发现注册状态变化（AT 模式无事件驱动，
+						// 或 QMI/MBIM 事件遗漏），重应用卡策略使「漫游数据」开关生效。
+						if prevRegStatus != worker.currentRegStatus() && worker.CurrentICCID() != "" {
+							logger.Info("[定时同步] 注册状态变化，重应用卡策略",
+								"device", worker.ID, "prev", prevRegStatus, "cur", worker.currentRegStatus())
+							p.resolveAndApplyPolicy(worker, "health_sync_reg_changed")
+						}
 						close(done)
 					}()
 

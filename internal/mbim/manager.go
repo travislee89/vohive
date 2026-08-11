@@ -39,6 +39,7 @@ type Manager struct {
 	mon               *mbim.Monitor
 	smsCB             func()
 	simStatusCB       func()
+	registerStateCB   func()
 	slotStatusCB      func(slotIndex, state uint32)
 	caps              *mbim.Capabilities
 	dataCfg           DataConfig
@@ -127,6 +128,18 @@ func (m *Manager) OnSimStatusChanged(cb func()) {
 	m.mu.Unlock()
 }
 
+// OnRegisterStateChanged registers a callback fired when the MBIM
+// REGISTER_STATE indication changes (e.g. home ↔ roaming transition).
+// Used by the Pool layer to re-apply card policy when the SIM enters/leaves roaming.
+func (m *Manager) OnRegisterStateChanged(cb func()) {
+	m.mu.Lock()
+	m.registerStateCB = cb
+	if m.mon != nil {
+		m.mon.SetOnRegisterState(func(mbim.Snapshot) { cb() })
+	}
+	m.mu.Unlock()
+}
+
 // OnSlotStatus registers a callback fired on every SLOT_INFO_STATUS indication.
 func (m *Manager) OnSlotStatus(cb func(slotIndex, state uint32)) {
 	m.mu.Lock()
@@ -191,6 +204,9 @@ func (m *Manager) openWithTransport(ctx context.Context, tr mbim.Transport) erro
 	}
 	if m.simStatusCB != nil {
 		mon.SetOnSubscriberReady(func(mbim.Snapshot) { m.simStatusCB() })
+	}
+	if m.registerStateCB != nil {
+		mon.SetOnRegisterState(func(mbim.Snapshot) { m.registerStateCB() })
 	}
 	if m.slotStatusCB != nil {
 		mon.SetOnSlotInfoStatus(func(s mbim.SlotInfoStatus) { m.slotStatusCB(s.SlotIndex, s.State) })

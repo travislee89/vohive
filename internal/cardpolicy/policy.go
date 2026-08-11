@@ -8,6 +8,7 @@ type Policy struct {
 	AirplaneEnabled        bool
 	IPVersion              string
 	APN                    string
+	RoamingDataEnabled     bool // 漫游时是否允许开启蜂窝数据网络，默认关闭
 	QuotaEnabled           bool
 	QuotaBytes             int64
 	BillingDay             int

@@ -33,6 +33,7 @@ type Monitor struct {
 	onUSSD            func(USSDResponse)
 	onSubscriberReady func(Snapshot)
 	onSlotInfoStatus  func(SlotInfoStatus)
+	onRegisterState    func(Snapshot)
 }
 
 // NewMonitor creates a Monitor bound to a Device.
@@ -103,6 +104,16 @@ func (m *Monitor) SetOnSlotInfoStatus(cb func(SlotInfoStatus)) {
 	m.mu.Unlock()
 }
 
+// SetOnRegisterState registers a callback fired when the parsed REGISTER_STATE
+// indication changes RegisterState relative to the previous snapshot
+// (e.g. home ↔ roaming transition). Used by the Pool layer to re-apply card
+// policy when the SIM enters/leaves roaming.
+func (m *Monitor) SetOnRegisterState(cb func(Snapshot)) {
+	m.mu.Lock()
+	m.onRegisterState = cb
+	m.mu.Unlock()
+}
+
 func (m *Monitor) apply(ind Indication) {
 	switch {
 	case ind.Service.Equal(UUIDSMS):
@@ -160,6 +171,7 @@ func (m *Monitor) apply(ind Indication) {
 
 	m.mu.Lock()
 	var fireSubscriberReady bool
+	var fireRegisterState bool
 	var firedSnap Snapshot
 	switch ind.CID {
 	case CIDBasicConnectSignalState:
@@ -170,6 +182,9 @@ func (m *Monitor) apply(ind Indication) {
 		}
 	case CIDBasicConnectRegisterState:
 		if rs, err := parseRegisterState(ind.InfoBuffer); err == nil {
+			if rs.RegisterState != m.snap.RegisterState {
+				fireRegisterState = true
+			}
 			m.snap.RegisterState = rs.RegisterState
 			m.snap.ProviderName = rs.ProviderName
 			m.snap.MCC = rs.MCC
@@ -193,12 +208,16 @@ func (m *Monitor) apply(ind Indication) {
 		return
 	}
 	m.snap.UpdatedAt = time.Now()
-	if fireSubscriberReady {
+	if fireSubscriberReady || fireRegisterState {
 		firedSnap = m.snap
 	}
-	cb := m.onSubscriberReady
+	cbSubscriber := m.onSubscriberReady
+	cbRegister := m.onRegisterState
 	m.mu.Unlock()
-	if fireSubscriberReady && cb != nil {
-		cb(firedSnap)
+	if fireSubscriberReady && cbSubscriber != nil {
+		cbSubscriber(firedSnap)
+	}
+	if fireRegisterState && cbRegister != nil {
+		cbRegister(firedSnap)
 	}
 }

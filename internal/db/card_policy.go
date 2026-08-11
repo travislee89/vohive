@@ -26,6 +26,7 @@ type CardPolicy struct {
 	IPVersion            string    `gorm:"column:ip_version" json:"ip_version"`
 	APN                  string    `gorm:"column:apn" json:"apn"`
 	Source               string    `gorm:"column:source" json:"source"` // auto | user
+	RoamingDataEnabled   bool      `gorm:"column:roaming_data_enabled" json:"roaming_data_enabled"` // 漫游时是否允许开启蜂窝数据网络，默认关闭
 	QuotaEnabled         bool      `gorm:"column:quota_enabled" json:"quota_enabled"`
 	QuotaBytes           int64     `gorm:"column:quota_bytes" json:"quota_bytes"`
 	BillingDay           int       `gorm:"column:billing_day" json:"billing_day"`
@@ -42,12 +43,13 @@ func (CardPolicy) TableName() string { return "card_policies" }
 func DefaultCardPolicy(iccid string) CardPolicy {
 	return CardPolicy{
 		ICCID:           strings.TrimSpace(iccid),
-		NetworkEnabled:  false,
-		VoWiFiEnabled:   false,
-		AirplaneEnabled: false,
-		IPVersion:       "v4",
-		APN:             "",
-		Source:          "auto",
+		NetworkEnabled:     false,
+		VoWiFiEnabled:      false,
+		AirplaneEnabled:    false,
+		IPVersion:          "v4",
+		APN:                "",
+		Source:             "auto",
+		RoamingDataEnabled: false, // 默认关闭：漫游时不开蜂窝数据
 	}
 }
 
@@ -117,13 +119,14 @@ func UpsertCardPolicy(p CardPolicy) error {
 	return DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "iccid"}},
 		DoUpdates: clause.Assignments(map[string]any{
-			"network_enabled":          p.NetworkEnabled,
-			"vowifi_enabled":           p.VoWiFiEnabled,
-			"airplane_enabled":         p.AirplaneEnabled,
-			"ip_version":               p.IPVersion,
-			"apn":                      p.APN,
-			"source":                   p.Source,
-			"quota_enabled":            p.QuotaEnabled,
+			"network_enabled":            p.NetworkEnabled,
+			"vowifi_enabled":             p.VoWiFiEnabled,
+			"airplane_enabled":           p.AirplaneEnabled,
+			"ip_version":                 p.IPVersion,
+			"apn":                        p.APN,
+			"source":                     p.Source,
+			"roaming_data_enabled":       p.RoamingDataEnabled,
+			"quota_enabled":              p.QuotaEnabled,
 			"quota_bytes":              p.QuotaBytes,
 			"billing_day":              p.BillingDay,
 			"billing_timezone":         p.BillingTimezone,

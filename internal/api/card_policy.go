@@ -57,6 +57,7 @@ func (s *Server) handleGetCardPolicy(c *gin.Context) {
 		"ip_version":               pol.IPVersion,
 		"apn":                      pol.APN,
 		"source":                   pol.Source,
+		"roaming_data_enabled":     pol.RoamingDataEnabled,
 		"quota_enabled":            pol.QuotaEnabled,
 		"quota_bytes":              pol.QuotaBytes,
 		"billing_day":              pol.BillingDay,
@@ -94,6 +95,7 @@ func (s *Server) handlePutCardPolicy(c *gin.Context) {
 		VoWiFiEnabled           *bool  `json:"vowifi_enabled"`
 		IPVersion               string `json:"ip_version"`
 		APN                     string `json:"apn"`
+		RoamingDataEnabled      *bool  `json:"roaming_data_enabled"`
 		QuotaEnabled            *bool  `json:"quota_enabled"`
 		QuotaBytes              *int64 `json:"quota_bytes"`
 		BillingDay               *int   `json:"billing_day"`
@@ -123,6 +125,9 @@ func (s *Server) handlePutCardPolicy(c *gin.Context) {
 	}
 	if req.APN != "" {
 		pol.APN = req.APN
+	}
+	if req.RoamingDataEnabled != nil {
+		pol.RoamingDataEnabled = *req.RoamingDataEnabled
 	}
 	if req.QuotaEnabled != nil {
 		pol.QuotaEnabled = *req.QuotaEnabled

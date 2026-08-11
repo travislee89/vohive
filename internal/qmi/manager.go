@@ -2287,6 +2287,19 @@ func (m *Manager) OnSimStatusChanged(handler func()) {
 	})
 }
 
+// OnServingSystemChanged 注册服务系统（注册状态/漫游）变化回调。
+// 供 Pool 层订阅，当注册状态变化（如归属地↔漫游切换）时触发卡策略重应用。
+func (m *Manager) OnServingSystemChanged(handler func()) {
+	if handler == nil {
+		return
+	}
+	m.qmiMgr.OnEvent(func(e qmimanager.Event) {
+		if e.Type == qmimanager.EventServingSystemChanged {
+			handler()
+		}
+	})
+}
+
 // GetPrivateIP 获取私有 IP (内网 IP)
 func (m *Manager) GetPrivateIP() string {
 	settings := m.qmiMgr.Settings()

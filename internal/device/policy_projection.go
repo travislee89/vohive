@@ -80,6 +80,18 @@ func (p *Pool) resolveAndApplyPolicy(worker *Worker, reason string) policyApplyR
 				return policyApplyResult{Applied: true, ICCID: iccid, Reason: reason}
 			}
 		}
+		// 漫游拦截：若用户要求开网但未开启「漫游数据」开关，且当前 SIM 处于漫游注册状态，
+		// 跳过开网偏好（仅拦截，不落库——保留用户开网意图，回到归属地或打开漫游开关即恢复）。
+		if pol.NetworkEnabled && !pol.RoamingDataEnabled && isWorkerRoaming(worker) {
+			logger.Info("漫游且未开启漫游数据，跳过自动开网", "device", worker.ID, "iccid", iccid,
+				"reg_status", worker.state.Runtime.RegStatus, "reason", reason)
+			// 若当前已连网，需主动停网以落实漫游拦截。
+			if nc := worker.NetworkController(); nc != nil && nc.IsConnected() {
+				_ = worker.StopNetwork()
+			}
+			worker.clearCachedIP()
+			return policyApplyResult{Applied: true, ICCID: iccid, Reason: "roaming_blocked"}
+		}
 		if err := p.applyNetworkPreference(worker); err != nil {
 			logger.Warn("应用网络偏好失败", "device", worker.ID, "err", err)
 		}

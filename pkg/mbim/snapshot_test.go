@@ -184,3 +184,52 @@ func TestMonitorSlotInfoStatusCallback(t *testing.T) {
 		t.Fatal("OnSlotInfoStatus callback was not invoked")
 	}
 }
+
+// TestMonitorFiresOnRegisterStateChange 验证 REGISTER_STATE indication 变化时触发回调（如归属地→漫游）。
+func TestMonitorFiresOnRegisterStateChange(t *testing.T) {
+	m := &Monitor{}
+	got := make(chan Snapshot, 1)
+	m.SetOnRegisterState(func(s Snapshot) { got <- s })
+
+	// 先设一个初始注册状态（home=3）
+	providerID := encodeUTF16("46000")
+	reg := make([]byte, registerFixedLen+len(providerID))
+	le.PutUint32(reg[4:], 3) // home
+	le.PutUint32(reg[20:], registerFixedLen)
+	le.PutUint32(reg[24:], uint32(len(providerID)))
+	copy(reg[registerFixedLen:], providerID)
+	m.apply(Indication{Service: UUIDBasicConnect, CID: CIDBasicConnectRegisterState, InfoBuffer: reg})
+
+	// 第一次 apply 不应触发（没有"变化"——初始为 0→3 也算变化，应触发）
+	select {
+	case <-got:
+		// 初始 0→3 属于变化，触发是合理的
+	case <-time.After(time.Second):
+		t.Fatal("RegisterState 从 0 变到 3 应触发回调")
+	}
+
+	// 再次用相同状态 apply，不应触发
+	m.apply(Indication{Service: UUIDBasicConnect, CID: CIDBasicConnectRegisterState, InfoBuffer: reg})
+	select {
+	case <-got:
+		t.Fatal("RegisterState 未变化(3→3)时不应触发回调")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// 变为漫游(4)应触发
+	reg2 := make([]byte, registerFixedLen+len(providerID))
+	le.PutUint32(reg2[4:], 4) // roaming
+	le.PutUint32(reg2[20:], registerFixedLen)
+	le.PutUint32(reg2[24:], uint32(len(providerID)))
+	copy(reg2[registerFixedLen:], providerID)
+	m.apply(Indication{Service: UUIDBasicConnect, CID: CIDBasicConnectRegisterState, InfoBuffer: reg2})
+
+	select {
+	case s := <-got:
+		if s.RegisterState != 4 {
+			t.Fatalf("RegisterState = %d, want 4", s.RegisterState)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("RegisterState 从 3 变到 4 应触发回调")
+	}
+}
