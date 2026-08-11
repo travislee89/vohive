@@ -177,3 +177,143 @@ func TestRefreshIdentityAndApplyCardPolicyDoesNotFallbackToConfiguredNetworkWith
 		t.Fatal("无 policy resolver 时不应回退到旧 worker.Config 连接数据网络")
 	}
 }
+
+// 漫游且未开启「漫游数据」开关时，应跳过开网（reason=roaming_blocked），不调用 Connect。
+func TestResolveAndApplyPolicy_RoamingBlocksNetworkWhenDisabled(t *testing.T) {
+	p := NewPool(nil)
+	defer p.cancel()
+	p.SetPolicyResolver(&stubPolicyResolver{
+		pol: cardpolicy.Policy{
+			ICCID:              "123",
+			NetworkEnabled:     true,
+			RoamingDataEnabled: false,
+		},
+	})
+	fc := &fakeController{connected: false}
+	w := &Worker{
+		ID:         "wwan0",
+		netOverride: fc,
+		Backend:    &workerStatusBackendStub{opMode: backend.ModeOnline},
+	}
+	w.state.Identity.ICCID = "123"
+	// 模拟漫游注册状态（RegStatus=5）
+	w.state.Runtime.RegStatus = regStatusRoaming
+
+	res := p.resolveAndApplyPolicy(w, "test")
+	if !res.Applied {
+		t.Fatalf("应标记 Applied: %+v", res)
+	}
+	if res.Reason != "roaming_blocked" {
+		t.Fatalf("reason 应为 roaming_blocked: %q", res.Reason)
+	}
+	if fc.connected {
+		t.Fatal("漫游且未开启漫游数据时不应开网")
+	}
+}
+
+// 漫游但已开启「漫游数据」开关时，应正常开网。
+func TestResolveAndApplyPolicy_RoamingAllowsNetworkWhenEnabled(t *testing.T) {
+	p := NewPool(nil)
+	defer p.cancel()
+	p.SetPolicyResolver(&stubPolicyResolver{
+		pol: cardpolicy.Policy{
+			ICCID:              "123",
+			NetworkEnabled:     true,
+			RoamingDataEnabled: true,
+		},
+	})
+	fc := &fakeController{connected: false}
+	w := &Worker{
+		ID:         "wwan0",
+		netOverride: fc,
+		Backend:    &workerStatusBackendStub{opMode: backend.ModeOnline},
+	}
+	w.state.Identity.ICCID = "123"
+	w.state.Runtime.RegStatus = regStatusRoaming
+
+	res := p.resolveAndApplyPolicy(w, "test")
+	if !res.Applied {
+		t.Fatalf("应标记 Applied: %+v", res)
+	}
+	if res.Reason == "roaming_blocked" {
+		t.Fatal("已开启漫游数据时不应被拦截")
+	}
+}
+
+// 非漫游状态（归属地注册 RegStatus=1）时，无论漫游数据开关如何，都应正常开网。
+func TestResolveAndApplyPolicy_HomeNotBlocked(t *testing.T) {
+	p := NewPool(nil)
+	defer p.cancel()
+	p.SetPolicyResolver(&stubPolicyResolver{
+		pol: cardpolicy.Policy{
+			ICCID:              "123",
+			NetworkEnabled:     true,
+			RoamingDataEnabled: false,
+		},
+	})
+	fc := &fakeController{connected: false}
+	w := &Worker{
+		ID:         "wwan0",
+		netOverride: fc,
+		Backend:    &workerStatusBackendStub{opMode: backend.ModeOnline},
+	}
+	w.state.Identity.ICCID = "123"
+	// 归属地注册
+	w.state.Runtime.RegStatus = 1
+
+	res := p.resolveAndApplyPolicy(w, "test")
+	if !res.Applied {
+		t.Fatalf("应标记 Applied: %+v", res)
+	}
+	if res.Reason == "roaming_blocked" {
+		t.Fatal("归属地注册不应被漫游拦截")
+	}
+}
+
+// 漫游时已连网，应用策略后应主动停网。
+func TestResolveAndApplyPolicy_RoamingStopsConnectedNetwork(t *testing.T) {
+	p := NewPool(nil)
+	defer p.cancel()
+	p.SetPolicyResolver(&stubPolicyResolver{
+		pol: cardpolicy.Policy{
+			ICCID:              "123",
+			NetworkEnabled:     true,
+			RoamingDataEnabled: false,
+		},
+	})
+	fc := &fakeController{connected: true} // 模拟当前已连网
+	w := &Worker{
+		ID:         "wwan0",
+		netOverride: fc,
+		Backend:    &workerStatusBackendStub{opMode: backend.ModeOnline},
+	}
+	w.state.Identity.ICCID = "123"
+	w.state.Runtime.RegStatus = regStatusRoaming
+
+	res := p.resolveAndApplyPolicy(w, "test")
+	if res.Reason != "roaming_blocked" {
+		t.Fatalf("reason 应为 roaming_blocked: %q", res.Reason)
+	}
+	if fc.connected {
+		t.Fatal("漫游拦截时应主动断开已连网络")
+	}
+}
+
+// isWorkerRoaming 辅助函数测试
+func TestIsWorkerRoaming(t *testing.T) {
+	if isWorkerRoaming(nil) {
+		t.Fatal("nil worker 不应判为漫游")
+	}
+	w := &Worker{ID: "wwan0"}
+	if isWorkerRoaming(w) {
+		t.Fatal("未设置注册状态的 worker 不应判为漫游")
+	}
+	w.state.Runtime.RegStatus = 1
+	if isWorkerRoaming(w) {
+		t.Fatal("归属地注册(1)不应判为漫游")
+	}
+	w.state.Runtime.RegStatus = regStatusRoaming
+	if !isWorkerRoaming(w) {
+		t.Fatal("RegStatus=5 应判为漫游")
+	}
+}

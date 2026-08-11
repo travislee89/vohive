@@ -286,3 +286,54 @@ func TestGetCardPolicyReturnsQuotaUsage(t *testing.T) {
 		t.Fatalf("threshold=%d", usage.Threshold)
 	}
 }
+
+// TestPutCardPolicyRoamingDataEnabled 验证 PUT 卡策略带 roaming_data_enabled 字段能原样落库并回读。
+func TestPutCardPolicyRoamingDataEnabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	openTestDB(t)
+	s := &Server{pool: device.NewPool(&config.Config{})}
+	r := gin.Default()
+	r.PUT("/api/cards/:iccid/policy", s.handlePutCardPolicy)
+	r.GET("/api/cards/:iccid/policy", s.handleGetCardPolicy)
+
+	// 1. 写入 roaming_data_enabled=true
+	body := `{"roaming_data_enabled":true}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/cards/8986r01/policy", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT code=%d body=%s", w.Code, w.Body.String())
+	}
+	got, _ := db.GetCardPolicy("8986r01")
+	if !got.RoamingDataEnabled {
+		t.Fatalf("roaming_data_enabled 应为 true: %+v", got)
+	}
+
+	// 2. GET 响应也应包含 roaming_data_enabled
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/api/cards/8986r01/policy", nil)
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("GET code=%d body=%s", w2.Code, w2.Body.String())
+	}
+	var resp map[string]json.RawMessage
+	if err := json.Unmarshal(w2.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	var roamingEnabled bool
+	if raw, ok := resp["roaming_data_enabled"]; ok {
+		if err := json.Unmarshal(raw, &roamingEnabled); err != nil {
+			t.Fatalf("解析 roaming_data_enabled 失败: %v", err)
+		}
+	}
+	if !roamingEnabled {
+		t.Fatal("GET 响应 roaming_data_enabled 应为 true")
+	}
+
+	// 3. 默认值（未建档的新卡）应为 false
+	def := db.DefaultCardPolicy("newcard")
+	if def.RoamingDataEnabled {
+		t.Fatal("新卡默认 roaming_data_enabled 应为 false")
+	}
+}

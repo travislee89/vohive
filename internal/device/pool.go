@@ -677,6 +677,12 @@ func (p *Pool) bindQMIStateIndications(worker *Worker) {
 			}
 		}()
 	})
+
+	// 注册状态（含漫游↔归属地切换）变化时刷新运行时状态并重应用卡策略，
+	// 使「漫游数据」开关能在进入/离开漫游时即时生效。
+	worker.QMICore.OnServingSystemChanged(func() {
+		p.handleServingSystemChanged(worker, "qmi_serving_system_changed")
+	})
 }
 
 func (p *Pool) bindMBIMStateIndications(worker *Worker) {
@@ -689,6 +695,12 @@ func (p *Pool) bindMBIMStateIndications(worker *Worker) {
 		p.handleSIMStatusEvent(worker.ID, "mbim_sim_status", nil, "")
 		p.wakeDesiredVoWiFiRecoverFromDeviceEvent(worker.ID, "post_switch_mbim_sim_status")
 	})
+
+	// 注册状态（含漫游↔归属地切换）变化时刷新运行时状态并重应用卡策略，
+	// 使「漫游数据」开关能在进入/离开漫游时即时生效。
+	worker.MBIMCore.OnRegisterStateChanged(func() {
+		p.handleServingSystemChanged(worker, "mbim_register_state_changed")
+	})
 }
 
 func (p *Pool) bindMBIMSlotIndications(worker *Worker) {
@@ -699,6 +711,26 @@ func (p *Pool) bindMBIMSlotIndications(worker *Worker) {
 		logger.Debug("收到 MBIM 卡槽状态指示", "device", worker.ID, "slot", slotIndex, "state", state)
 		p.wakeDesiredVoWiFiRecoverFromDeviceEvent(worker.ID, "mbim_slot_status")
 	})
+}
+
+// handleServingSystemChanged 在收到注册状态变化事件后，刷新 worker 运行时状态（更新
+// RegStatus，含漫游↔归属地切换），然后重应用卡策略。这样「漫游数据」开关能在进入/
+// 离开漫游时即时生效：进入漫游且开关关闭 → 拦截开网/停网；离开漫游 → 恢复开网。
+// 事件来自 QMI ServingSystemChanged 或 MBIM REGISTER_STATE indication。
+func (p *Pool) handleServingSystemChanged(worker *Worker, reason string) {
+	if worker == nil {
+		return
+	}
+	// 异步执行，避免在底层 indication 回调线程里做耗时操作。
+	go func() {
+		_ = worker.RefreshRuntime(nil, reason)
+		p.PersistRuntimeState(worker)
+		if worker.CurrentICCID() != "" {
+			logger.Info("[事件驱动] 注册状态变化，重应用卡策略", "device", worker.ID, "reason", reason)
+			p.resolveAndApplyPolicy(worker, reason)
+		}
+		p.broadcastVoWiFiStateChange(worker.ID)
+	}()
 }
 
 func (p *Pool) bindMBIMHealthIndications(worker *Worker) {

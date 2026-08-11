@@ -370,6 +370,7 @@ export type CardPolicy = {
   ip_version: 'v4' | 'v6' | 'v4v6'
   apn: string
   source: 'auto' | 'user'
+  roaming_data_enabled: boolean
   updated_at?: string
   quota_enabled: boolean
   quota_bytes: number

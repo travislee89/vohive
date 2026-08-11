@@ -1336,6 +1336,7 @@ usePollingScheduler(async () => {
                 :iccid="selectedDetail?.modem?.iccid"
                 :policy="cardPolicy"
                 :device-online="selectedDevice.running === true"
+                :reg-status="selectedDetail?.modem?.reg_status"
                 @policy-changed="onCardPolicyChanged"
               />
             </el-tab-pane>

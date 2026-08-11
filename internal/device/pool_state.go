@@ -101,6 +101,30 @@ func hasRuntimeSnapshot(status modem.DeviceStatus) bool {
 		status.SimInserted
 }
 
+// regStatusRoaming 是各后端统一归一后的"漫游注册"状态码（QMI RegStateRoaming / MBIM registered-roaming）。
+const regStatusRoaming = 5
+
+// isWorkerRoaming 判断 worker 当前是否处于漫游注册状态。
+// 基于后端统一归一的 RegStatus（5=漫游）。读取需在 cacheMu 保护下进行。
+func isWorkerRoaming(w *Worker) bool {
+	if w == nil {
+		return false
+	}
+	w.cacheMu.RLock()
+	defer w.cacheMu.RUnlock()
+	return w.state.Runtime.RegStatus == regStatusRoaming
+}
+
+// currentRegStatus 返回 worker 当前的网络注册状态码（读取需在 cacheMu 保护下进行）。
+func (w *Worker) currentRegStatus() int {
+	if w == nil {
+		return 0
+	}
+	w.cacheMu.RLock()
+	defer w.cacheMu.RUnlock()
+	return w.state.Runtime.RegStatus
+}
+
 // projectDeviceStatusLocked 将内部缓存的 Worker 状态数据投影并合并为公开暴露的通用 `modem.DeviceStatus` 结构体
 func (w *Worker) projectDeviceStatusLocked() modem.DeviceStatus {
 	status := modem.DeviceStatus{

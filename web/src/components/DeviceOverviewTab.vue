@@ -140,6 +140,8 @@ const controlOnline = computed(() => isControlOnline(props.device))
 
 const isRegistered = computed(() => isRadioRegistered(props.device))
 
+const isRoaming = computed(() => props.device?.modem?.reg_status === 5)
+
 const cellularStatusTone = computed<StatusLightTone>(() => {
   if (isRecoveryPhase(props.device?.lifecycle_phase)) return 'warning'
   if (!controlOnline.value) return 'danger'
@@ -262,6 +264,7 @@ const networkPanelMessage = computed(() => {
               <template v-if="isRegistered">
                 {{ device?.modem?.operator || '--' }}
                 <span v-if="device?.modem?.network_mode" class="opacity-70">· {{ [device?.modem?.network_duplex, device?.modem?.network_mode].filter(Boolean).join(' ') }}</span>
+                <el-tag v-if="isRoaming" type="warning" size="small" effect="light" class="ml-1">漫游</el-tag>
               </template>
               <template v-else>
                 {{ cellularStatusText }}
