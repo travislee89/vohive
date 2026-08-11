@@ -1699,6 +1699,10 @@ func (s *Server) handleEsimListProfiles(c *gin.Context) {
 				respondEsimBusy(c, "refresh_profiles", err)
 				return
 			}
+			if esim.IsEUICCNotFound(err) {
+				respondEsimNoEUICCProfiles(c)
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -1708,6 +1712,10 @@ func (s *Server) handleEsimListProfiles(c *gin.Context) {
 	if err != nil {
 		if isEsimBusyError(err) {
 			respondEsimBusy(c, "list_profiles", err)
+			return
+		}
+		if esim.IsEUICCNotFound(err) {
+			respondEsimNoEUICCProfiles(c)
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1766,6 +1774,20 @@ func respondEsimBusy(c *gin.Context, reason string, err error) {
 		"reason":       reason,
 		"retryAfterMs": esimBusyRetryAfterMs,
 	})
+}
+
+// respondEsimNoEUICC 在未发现 eUICC（物理 SIM 卡等）时返回 200 + 空总览，
+// 将"非 eSIM"作为正常业务状态而非服务器错误报告，避免前端弹窗与 500 误报。
+func respondEsimNoEUICC(c *gin.Context) {
+	c.JSON(http.StatusOK, &esim.EsimOverview{
+		ChipInfo: nil,
+		Profiles: []esim.EUICCProfiles{},
+	})
+}
+
+// respondEsimNoEUICCProfiles 在未发现 eUICC 时返回 200 + 空 profiles 列表。
+func respondEsimNoEUICCProfiles(c *gin.Context) {
+	c.JSON(http.StatusOK, []esim.EUICCProfiles{})
 }
 
 func esimDeleteSuccessBody(result esim.DeleteProfileResult) gin.H {
@@ -1977,6 +1999,10 @@ func (s *Server) handleEsimGetEID(c *gin.Context) {
 			respondEsimBusy(c, "get_eids", err)
 			return
 		}
+		if esim.IsEUICCNotFound(err) {
+			c.JSON(http.StatusOK, gin.H{"eids": []esim.EUICCInfo{}})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1997,6 +2023,10 @@ func (s *Server) handleEsimGetChipInfo(c *gin.Context) {
 	if err != nil {
 		if isEsimBusyError(err) {
 			respondEsimBusy(c, "get_chip_info", err)
+			return
+		}
+		if esim.IsEUICCNotFound(err) {
+			c.JSON(http.StatusOK, &esim.EUICCChipInfo{})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -2021,6 +2051,10 @@ func (s *Server) handleEsimGetOverview(c *gin.Context) {
 				respondEsimBusy(c, "refresh_overview", err)
 				return
 			}
+			if esim.IsEUICCNotFound(err) {
+				respondEsimNoEUICC(c)
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -2030,6 +2064,10 @@ func (s *Server) handleEsimGetOverview(c *gin.Context) {
 	if err != nil {
 		if isEsimBusyError(err) {
 			respondEsimBusy(c, "get_overview", err)
+			return
+		}
+		if esim.IsEUICCNotFound(err) {
+			respondEsimNoEUICC(c)
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

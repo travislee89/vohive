@@ -315,6 +315,10 @@ type Manager struct {
 // 读操作（GetProfiles / GetEsimOverview）在检测到此情况时立即降级，不进入 SIM 卡通道
 var ErrOperationInProgress = fmt.Errorf("eSIM 操作进行中，请稍后重试")
 
+// ErrNoEUICC 表示 AID 扫描未发现任何可用的 eUICC（典型场景：插入的是物理 SIM 卡）。
+// 这是一个预期的业务状态而非服务器内部错误，API 层应据此返回 200 + 空总览而非 500。
+var ErrNoEUICC = errors.New("未发现任何 eUICC")
+
 type ManagerOptions struct {
 	DeviceID             string
 	Transport            string
@@ -941,9 +945,9 @@ func (m *Manager) forEachEUICC(fn func(client *lpa.Client, aid []byte, eidStr st
 		"triedCount", len(aids),
 		"err", err)
 	if err != nil {
-		return fmt.Errorf("未发现任何 eUICC: %w", err)
+		return fmt.Errorf("%w: %w", ErrNoEUICC, err)
 	}
-	return fmt.Errorf("未发现任何 eUICC")
+	return ErrNoEUICC
 }
 
 func (m *Manager) waitForNoWriteOperation() error {

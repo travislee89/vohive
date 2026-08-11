@@ -81,3 +81,9 @@ func IsDeleteProfileNotFound(err error) bool {
 func IsDeleteProfileBusy(err error) bool {
 	return ClassifyDeleteProfileError(err) == DeleteProfileErrorBusy
 }
+
+// IsEUICCNotFound 判别"未发现任何 eUICC"这一预期业务状态（例如插入的是物理 SIM 卡）。
+// 调用方据此将错误降级为 200 + 空总览，而非 500 服务器内部错误。
+func IsEUICCNotFound(err error) bool {
+	return errors.Is(err, ErrNoEUICC)
+}
