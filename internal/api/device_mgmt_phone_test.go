@@ -750,3 +750,84 @@ func TestHandleEsimRetryNotificationMapsStatusCodes(t *testing.T) {
 		})
 	}
 }
+
+// TestHandleEsimGetOverviewReturns200OnNoEUICC 验证当底层报告"未发现任何 eUICC"（物理 SIM 卡场景）
+// 时，overview 接口返回 200 + 空总览而非 500，避免前端弹窗误报。
+func TestHandleEsimGetOverviewReturns200OnNoEUICC(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	for _, tc := range []struct {
+		name    string
+		refresh bool
+	}{
+		{name: "no refresh", refresh: false},
+		{name: "with refresh", refresh: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mgr := newTestEsimManager()
+			setNestedPrivateField(t, mgr, []string{"overviewLoader"}, func() (*esim.EsimOverview, error) {
+				return nil, esim.ErrNoEUICC
+			})
+
+			p := device.NewPool(&config.Config{})
+			setNestedPrivateField(t, p, []string{"workers"}, map[string]*device.Worker{
+				"dev-esim": {ID: "dev-esim", EsimMgr: mgr},
+			})
+			server := &Server{pool: p}
+
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Params = gin.Params{{Key: "id", Value: "dev-esim"}}
+			url := "/devices/dev-esim/esim"
+			if tc.refresh {
+				url += "?refresh=true"
+			}
+			ctx.Request = httptest.NewRequest(http.MethodGet, url, nil)
+
+			server.handleEsimGetOverview(ctx)
+
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status=%d want=%d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+			}
+			body := recorder.Body.String()
+			if !strings.Contains(body, `"chip_info":null`) {
+				t.Fatalf("body=%q want chip_info null", body)
+			}
+			if !strings.Contains(body, `"profiles":[]`) {
+				t.Fatalf("body=%q want empty profiles array", body)
+			}
+		})
+	}
+}
+
+// TestHandleEsimListProfilesReturns200OnNoEUICC 验证 profiles 接口在物理 SIM 场景返回 200 + 空数组。
+func TestHandleEsimListProfilesReturns200OnNoEUICC(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mgr := newTestEsimManager()
+	// GetProfiles 走 loadOverview → overviewLoader，故在此注入 ErrNoEUICC
+	setNestedPrivateField(t, mgr, []string{"overviewLoader"}, func() (*esim.EsimOverview, error) {
+		return nil, esim.ErrNoEUICC
+	})
+
+	p := device.NewPool(&config.Config{})
+	setNestedPrivateField(t, p, []string{"workers"}, map[string]*device.Worker{
+		"dev-esim": {ID: "dev-esim", EsimMgr: mgr},
+	})
+	server := &Server{pool: p}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Params = gin.Params{{Key: "id", Value: "dev-esim"}}
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/devices/dev-esim/esim/profiles", nil)
+
+	server.handleEsimListProfiles(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d want=%d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if body := recorder.Body.String(); !strings.Contains(body, "[]") {
+		t.Fatalf("body=%q want empty array", body)
+	}
+}
+
