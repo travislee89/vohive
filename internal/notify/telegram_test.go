@@ -1,6 +1,10 @@
 package notify
 
-import "testing"
+import (
+	"testing"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
 
 func TestBuildTelegramTextMessageKeepsRawSMSContent(t *testing.T) {
 	t.Parallel()
@@ -27,5 +31,55 @@ func TestUnknownCommandReplyUsesPlainTemplate(t *testing.T) {
 	want := "未知命令 / badcmd\n提示    请检查命令名或使用 /list、/status、/send 等已注册命令"
 	if got != want {
 		t.Fatalf("unknownCommandReply() = %q, want %q", got, want)
+	}
+}
+
+func TestCommandMenuEqual(t *testing.T) {
+	t.Parallel()
+
+	base := []tgbotapi.BotCommand{
+		{Command: "list", Description: "查看设备列表与运行状态"},
+		{Command: "send", Description: "发送短信"},
+		{Command: "status", Description: "查看设备详细状态"},
+	}
+
+	// 相同命令、顺序不同应视为相等（与顺序无关）
+	same := []tgbotapi.BotCommand{
+		{Command: "status", Description: "查看设备详细状态"},
+		{Command: "list", Description: "查看设备列表与运行状态"},
+		{Command: "send", Description: "发送短信"},
+	}
+	if !commandMenuEqual(base, same) {
+		t.Fatalf("commandMenuEqual(base, same) = false, want true")
+	}
+
+	// 长度不同
+	if commandMenuEqual(base, base[:2]) {
+		t.Fatalf("commandMenuEqual(base, shorter) = true, want false")
+	}
+
+	// 说明文案不同
+	diffDesc := []tgbotapi.BotCommand{
+		{Command: "list", Description: "查看设备列表与运行状态"},
+		{Command: "send", Description: "发送短信"},
+		{Command: "status", Description: "不同的说明文案"},
+	}
+	if commandMenuEqual(base, diffDesc) {
+		t.Fatalf("commandMenuEqual(base, diffDesc) = true, want false")
+	}
+
+	// 命令名不同
+	diffCmd := []tgbotapi.BotCommand{
+		{Command: "list", Description: "查看设备列表与运行状态"},
+		{Command: "send", Description: "发送短信"},
+		{Command: "other", Description: "查看设备详细状态"},
+	}
+	if commandMenuEqual(base, diffCmd) {
+		t.Fatalf("commandMenuEqual(base, diffCmd) = true, want false")
+	}
+
+	// 两个空列表
+	if !commandMenuEqual(nil, []tgbotapi.BotCommand{}) {
+		t.Fatalf("commandMenuEqual(nil, []) = false, want true")
 	}
 }

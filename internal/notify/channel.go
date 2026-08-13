@@ -8,6 +8,17 @@ type CommandContext interface {
 // CommandHandler 命令处理器，接收上下文及参数切片，返回回复文本
 type CommandHandler func(cmdCtx CommandContext, args []string) string
 
+// ChannelCommand 描述一个可用于命令菜单的命令（名称 + 说明文案）
+type ChannelCommand struct {
+	Command     string // 命令名（不含 "/"）
+	Description string // 展示给用户的说明
+}
+
+// commandMenuChannel 可选接口：支持向平台展示命令菜单的渠道（如 Telegram 的 setMyCommands）
+type commandMenuChannel interface {
+	SetCommandMenu(commands []ChannelCommand) error
+}
+
 // Channel 统一通知渠道接口
 // 所有通知渠道（Telegram、飞书、未来的 Discord/Slack 等）均实现此接口
 type Channel interface {
