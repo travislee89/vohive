@@ -164,20 +164,40 @@ func (m *Manager) initChannels(cfg *config.Config) error {
 
 // registerCommands 向所有已启用渠道注册同一组命令处理器
 func (m *Manager) registerCommands() {
-	commands := map[string]CommandHandler{
-		"send":   m.handleCmdSendSMS,
-		"status": m.handleCmdStatus,
-		"rotate": m.handleCmdRotate,
-		"list":   m.handleCmdList,
-		"sms":    m.handleCmdSMSInbox,
-		"esim":   m.handleCmdEsim,
-		"switch": m.handleCmdSwitch,
-		"vocall": m.handleCmdCall,
+	type registeredCommand struct {
+		cmd     string
+		desc    string
+		handler CommandHandler
+	}
+
+	// 有序定义命令，保证命令菜单展示顺序稳定
+	commands := []registeredCommand{
+		{"list", "查看设备列表与运行状态", m.handleCmdList},
+		{"sms", "查看最近短信记录", m.handleCmdSMSInbox},
+		{"esim", "查看设备 eSIM 配置", m.handleCmdEsim},
+		{"switch", "切换 eSIM Profile", m.handleCmdSwitch},
+		{"vocall", "发起 VoWiFi 模拟呼叫", m.handleCmdCall},
+		{"send", "发送短信", m.handleCmdSendSMS},
+		{"status", "查看设备详细状态", m.handleCmdStatus},
+		{"rotate", "切换公网 IP", m.handleCmdRotate},
 	}
 
 	for _, ch := range m.channels {
-		for cmd, handler := range commands {
-			ch.RegisterCommand(cmd, handler)
+		for _, c := range commands {
+			ch.RegisterCommand(c.cmd, c.handler)
+		}
+	}
+
+	// 向支持命令菜单的渠道（如 Telegram）推送命令说明
+	menu := make([]ChannelCommand, 0, len(commands))
+	for _, c := range commands {
+		menu = append(menu, ChannelCommand{Command: c.cmd, Description: c.desc})
+	}
+	for _, ch := range m.channels {
+		if menuCh, ok := ch.(commandMenuChannel); ok {
+			if err := menuCh.SetCommandMenu(menu); err != nil {
+				logger.Warn("设置命令菜单失败", "channel", ch.Name(), "err", err)
+			}
 		}
 	}
 }

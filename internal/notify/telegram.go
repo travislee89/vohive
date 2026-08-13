@@ -110,6 +110,63 @@ func (t *TelegramChannel) RegisterCommand(cmd string, handler CommandHandler) {
 	logger.Info("注册 Telegram 命令", "command", "/"+cmd)
 }
 
+// SetCommandMenu 通过 Telegram setMyCommands API 将命令列表推送到客户端菜单。
+// 使用 bot_command scope 限定为授权会话，使菜单只对授权用户可见。
+// 会先调用 getMyCommands 与期望列表比对，若完全一致则跳过更新，避免无谓的 API 调用。
+func (t *TelegramChannel) SetCommandMenu(commands []ChannelCommand) error {
+	if t == nil || t.api == nil {
+		return nil
+	}
+
+	botCommands := make([]tgbotapi.BotCommand, 0, len(commands))
+	for _, c := range commands {
+		botCommands = append(botCommands, tgbotapi.BotCommand{
+			Command:     c.Command,
+			Description: c.Description,
+		})
+	}
+
+	var scope *tgbotapi.BotCommandScope
+	if t.chatID != 0 {
+		scope = &tgbotapi.BotCommandScope{Type: "chat", ChatID: t.chatID}
+	}
+
+	// 先读取当前命令菜单，若与期望一致则无需更新
+	current, err := t.api.GetMyCommandsWithConfig(tgbotapi.GetMyCommandsConfig{Scope: scope})
+	if err != nil {
+		logger.Warn("获取 Telegram 当前命令菜单失败，将直接更新", "err", err)
+	} else if commandMenuEqual(current, botCommands) {
+		logger.Info("Telegram 命令菜单无变化，跳过更新", "count", len(botCommands))
+		return nil
+	}
+
+	cfg := tgbotapi.SetMyCommandsConfig{Commands: botCommands, Scope: scope}
+	if _, err := t.api.Request(cfg); err != nil {
+		logger.Error("设置 Telegram 命令菜单失败", "err", err)
+		return err
+	}
+
+	logger.Info("已设置 Telegram 命令菜单", "count", len(botCommands))
+	return nil
+}
+
+// commandMenuEqual 判断两个命令列表是否等价（与顺序无关，按命令名匹配说明文案）
+func commandMenuEqual(a, b []tgbotapi.BotCommand) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	desc := make(map[string]string, len(a))
+	for _, c := range a {
+		desc[c.Command] = c.Description
+	}
+	for _, c := range b {
+		if d, ok := desc[c.Command]; !ok || d != c.Description {
+			return false
+		}
+	}
+	return true
+}
+
 // tgCommandContext 实现了 CommandContext 接口
 type tgCommandContext struct {
 	channel *TelegramChannel
