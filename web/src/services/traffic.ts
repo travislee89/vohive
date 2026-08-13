@@ -57,5 +57,13 @@ export const trafficService = {
         }
       } as TrafficAnalysis
     })
+  },
+
+  rollup(horizonDays?: number) {
+    return callService(async () => {
+      const params = horizonDays ? { horizon: horizonDays } : undefined
+      const res = await api.post('/traffic/rollup', undefined, { params })
+      return res?.data?.rollup as { days: number; weeks: number; months: number; horizon_days: number } | undefined
+    })
   }
 }

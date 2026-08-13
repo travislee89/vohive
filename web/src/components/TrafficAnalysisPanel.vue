@@ -5,6 +5,7 @@ import RefreshButton from './RefreshButton.vue'
 import type { AppError } from '../types/domain'
 import type { TrafficAnalysis, TrafficRange } from '../services/traffic'
 import { formatISODate, formatISODateHour, formatHourStart, formatMonthDay } from '../utils/datetime'
+import { ArrowSync24Regular } from '@vicons/fluent'
 
 type TrafficAnalysisMode = 'global' | 'device'
 type TooltipParam = {
@@ -58,16 +59,21 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   deviceLabel?: string
   billing?: TrafficBillingInfo | null
+  showRollup?: boolean
+  rollupLoading?: boolean
 }>(), {
   title: '流量分析',
   subtitle: '数据每分钟采样一次，按日/周/月聚合',
   disabled: false,
-  billing: null
+  billing: null,
+  showRollup: false,
+  rollupLoading: false
 })
 
 const emit = defineEmits<{
   (e: 'update:range', value: TrafficRange): void
   (e: 'refresh'): void
+  (e: 'rollup'): void
 }>()
 
 const VChartComp = shallowRef<unknown>(null)
@@ -484,6 +490,16 @@ function handleRangeChange(value: string | number | boolean | undefined) {
           <el-radio-button label="month">月</el-radio-button>
         </el-radio-group>
         <RefreshButton :loading="loading" :disabled="disabled" @click="emit('refresh')" />
+        <el-button
+          v-if="showRollup"
+          :loading="rollupLoading"
+          :disabled="disabled"
+          class="!border-0 !bg-white/70 dark:!bg-white/5 ui-action-btn"
+          @click="emit('rollup')"
+        >
+          <el-icon><ArrowSync24Regular /></el-icon>
+          回填
+        </el-button>
       </div>
     </div>
 

@@ -224,6 +224,34 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /traffic/rollup:
+    post:
+      tags: [dashboard]
+      summary: 手动触发流量上卷回填
+      description: |
+        对最近指定天数内的流量数据逐天/逐周/逐月补跑上卷（幂等）。
+        用于补偿因进程停机/重启导致的遗漏上卷。
+      parameters:
+        - in: query
+          name: horizon
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 93
+            default: 31
+          description: 回填窗口天数，默认 31
+      responses:
+        '200':
+          description: 回填完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrafficRollupResponse'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /sms/send:
     post:
       tags: [sms]
@@ -2178,6 +2206,26 @@ components:
           $ref: '#/components/schemas/TrafficTotal'
         month:
           $ref: '#/components/schemas/TrafficTotal'
+
+    TrafficRollupResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        rollup:
+          $ref: '#/components/schemas/TrafficRollupResult'
+
+    TrafficRollupResult:
+      type: object
+      properties:
+        horizon_days:
+          type: integer
+        days:
+          type: integer
+        weeks:
+          type: integer
+        months:
+          type: integer
 
     TrafficTotal:
       type: object
