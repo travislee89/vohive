@@ -4,6 +4,7 @@ import ErrorState from './ErrorState.vue'
 import RefreshButton from './RefreshButton.vue'
 import type { AppError } from '../types/domain'
 import type { TrafficAnalysis, TrafficRange } from '../services/traffic'
+import { formatISODate, formatISODateHour, formatHourStart, formatMonthDay } from '../utils/datetime'
 
 type TrafficAnalysisMode = 'global' | 'device'
 type TooltipParam = {
@@ -37,6 +38,14 @@ type VueEChartsModule = {
   default: unknown
 }
 
+export type TrafficBillingInfo = {
+  used_bytes: number
+  threshold_bytes: number
+  quota_bytes: number
+  period_start?: string
+  period_end?: string
+}
+
 const props = withDefaults(defineProps<{
   analysis: TrafficAnalysis
   loading?: boolean
@@ -48,10 +57,12 @@ const props = withDefaults(defineProps<{
   subtitle?: string
   disabled?: boolean
   deviceLabel?: string
+  billing?: TrafficBillingInfo | null
 }>(), {
   title: '流量分析',
   subtitle: '数据每分钟采样一次，按日/周/月聚合',
-  disabled: false
+  disabled: false,
+  billing: null
 })
 
 const emit = defineEmits<{
@@ -158,63 +169,51 @@ function formatBytes(bytes: unknown) {
   return `${val.toFixed(i === 0 ? 0 : 2)} ${units[i]}`
 }
 
+// 自动选单位但取整（如 500 MB / 400 MB），用于套餐/阈值等整数期望的展示。
+function formatBytesInt(bytes: unknown) {
+  const v = Number(bytes) || 0
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let val = v
+  let i = 0
+  while (val >= 1024 && i < units.length - 1) {
+    val /= 1024
+    i++
+  }
+  return `${Math.round(val)} ${units[i]}`
+}
+
 function parsePeriodStart(value: unknown): Date | null {
   if (typeof value !== 'string' || !value.trim()) return null
   const date = new Date(value)
   return Number.isFinite(date.getTime()) ? date : null
 }
 
-function pad2(value: number) {
-  return String(value).padStart(2, '0')
-}
-
-function formatLocalDate(date: Date) {
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
-}
-
-function formatLocalHour(date: Date) {
-  return `${pad2(date.getHours())}:00`
-}
-
-function formatLocalDateHour(date: Date) {
-  return `${formatLocalDate(date)} ${formatLocalHour(date)}`
-}
-
 function formatTrafficAxisTime(periodStart: unknown, fallback: string) {
   const date = parsePeriodStart(periodStart)
   if (!date) return fallback
-  if (props.range === 'day') return formatLocalHour(date)
-  return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+  if (props.range === 'day') return formatHourStart(date)
+  return formatMonthDay(date)
 }
 
 function formatTrafficTooltipTime(periodStart: unknown, fallback: string | number | undefined) {
   const date = parsePeriodStart(periodStart)
   if (!date) return fallback ?? ''
-  if (props.range === 'day') return formatLocalDateHour(date)
-  return formatLocalDate(date)
+  if (props.range === 'day') return formatISODateHour(date)
+  return formatISODate(date)
 }
 
 function formatTrafficBucketTime(bucket: { period_start?: string; bucket?: string }) {
   const date = parsePeriodStart(bucket?.period_start)
   if (!date) return bucket?.bucket || ''
-  if (props.range === 'day') return formatLocalDateHour(date)
-  return formatLocalDate(date)
+  if (props.range === 'day') return formatISODateHour(date)
+  return formatISODate(date)
 }
 
-const analysisTotal = computed(() => {
-  const rx = analysisBuckets.value.reduce((sum, bucket) => sum + (Number(bucket.rx_bytes) || 0), 0)
-  const tx = analysisBuckets.value.reduce((sum, bucket) => sum + (Number(bucket.tx_bytes) || 0), 0)
-  return { rx, tx, total: rx + tx }
-})
+const summaryRangeTotals = computed(() => props.analysis.summary)
 
-const rangeText = computed(() => {
-  const map: Record<TrafficRange, string> = {
-    day: '本日',
-    week: '本周',
-    month: '本月'
-  }
-  return map[props.range] || '本周期'
-})
+function formatPeriod(ts?: string): string {
+  return formatISODate(ts)
+}
 
 function pickUnit(maxBytes: number) {
   const gb = 1024 * 1024 * 1024
@@ -506,18 +505,77 @@ function handleRangeChange(value: string | number | boolean | undefined) {
         @retry="emit('refresh')"
       />
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
         <div class="ui-panel-muted p-3">
-          <div class="text-xs text-gray-400">{{ rangeText }}下载</div>
-          <div class="text-lg font-mono font-bold mt-1">{{ formatBytes(analysisTotal.rx) }}</div>
+          <div class="text-sm font-bold text-gray-700 dark:text-gray-200">日流量统计</div>
+          <div class="mt-2 space-y-1">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-400">下载</span>
+              <span class="font-mono font-bold">{{ formatBytes(summaryRangeTotals.day.rx_bytes) }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-400">上传</span>
+              <span class="font-mono font-bold">{{ formatBytes(summaryRangeTotals.day.tx_bytes) }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs border-t border-gray-200 dark:border-white/10 pt-1">
+              <span class="text-gray-400">合计</span>
+              <span class="font-mono font-bold">{{ formatBytes(summaryRangeTotals.day.total_bytes) }}</span>
+            </div>
+          </div>
         </div>
         <div class="ui-panel-muted p-3">
-          <div class="text-xs text-gray-400">{{ rangeText }}上传</div>
-          <div class="text-lg font-mono font-bold mt-1">{{ formatBytes(analysisTotal.tx) }}</div>
+          <div class="text-sm font-bold text-gray-700 dark:text-gray-200">周流量统计</div>
+          <div class="mt-2 space-y-1">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-400">下载</span>
+              <span class="font-mono font-bold">{{ formatBytes(summaryRangeTotals.week.rx_bytes) }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-400">上传</span>
+              <span class="font-mono font-bold">{{ formatBytes(summaryRangeTotals.week.tx_bytes) }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs border-t border-gray-200 dark:border-white/10 pt-1">
+              <span class="text-gray-400">合计</span>
+              <span class="font-mono font-bold">{{ formatBytes(summaryRangeTotals.week.total_bytes) }}</span>
+            </div>
+          </div>
         </div>
         <div class="ui-panel-muted p-3">
-          <div class="text-xs text-gray-400">{{ rangeText }}合计</div>
-          <div class="text-lg font-mono font-bold mt-1">{{ formatBytes(analysisTotal.total) }}</div>
+          <div class="text-sm font-bold text-gray-700 dark:text-gray-200">月流量统计</div>
+          <div class="mt-2 space-y-1">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-400">下载</span>
+              <span class="font-mono font-bold">{{ formatBytes(summaryRangeTotals.month.rx_bytes) }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-400">上传</span>
+              <span class="font-mono font-bold">{{ formatBytes(summaryRangeTotals.month.tx_bytes) }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs border-t border-gray-200 dark:border-white/10 pt-1">
+              <span class="text-gray-400">合计</span>
+              <span class="font-mono font-bold">{{ formatBytes(summaryRangeTotals.month.total_bytes) }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="billing" class="ui-panel-muted p-3">
+          <div class="text-sm font-bold text-gray-700 dark:text-gray-200">计费月流量</div>
+          <div class="mt-2 space-y-1">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-400">本计费周期已用</span>
+              <span class="font-mono font-bold">{{ formatBytes(billing.used_bytes) }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-400">套餐流量</span>
+              <span class="font-mono font-bold">{{ formatBytesInt(billing.quota_bytes) }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-400">阈值流量</span>
+              <span class="font-mono font-bold">{{ formatBytesInt(billing.threshold_bytes) }}</span>
+            </div>
+            <div class="text-xs text-gray-400 pt-1 border-t border-gray-200 dark:border-white/10">
+              计费周期：{{ formatPeriod(billing.period_start) }} ~ {{ formatPeriod(billing.period_end) }}
+            </div>
+          </div>
         </div>
       </div>
 

@@ -32,6 +32,47 @@ type TrafficChartData struct {
 	Series       map[string][]int64 `json:"series"` // device_id -> [bytes, bytes, ...]
 }
 
+// TrafficTotal 单个时间范围内的下载/上传/合计（字节）。
+type TrafficTotal struct {
+	RxBytes    int64 `json:"rx_bytes"`
+	TxBytes    int64 `json:"tx_bytes"`
+	TotalBytes int64 `json:"total_bytes"`
+}
+
+// TrafficRangeTotals 同时聚合 day/week/month 三个范围的统计，供概览数值框一次取全。
+type TrafficRangeTotals struct {
+	Day   TrafficTotal `json:"day"`
+	Week  TrafficTotal `json:"week"`
+	Month TrafficTotal `json:"month"`
+}
+
+// GetTrafficRangeTotals 计算 day/week/month 三个范围的下载/上传/合计。
+// 复用了与图表一致的 range spec 与聚合逻辑，保证口径与各 tab 展示的数值一致。
+func GetTrafficRangeTotals(deviceID string, now time.Time) (TrafficRangeTotals, error) {
+	var out TrafficRangeTotals
+	for _, name := range []string{"day", "week", "month"} {
+		buckets, _, err := GetTrafficAnalysisWithChart(name, deviceID, now)
+		if err != nil {
+			return out, err
+		}
+		var rx, tx int64
+		for _, b := range buckets {
+			rx += b.RxBytes
+			tx += b.TxBytes
+		}
+		t := TrafficTotal{RxBytes: rx, TxBytes: tx, TotalBytes: rx + tx}
+		switch name {
+		case "day":
+			out.Day = t
+		case "week":
+			out.Week = t
+		case "month":
+			out.Month = t
+		}
+	}
+	return out, nil
+}
+
 func GetTrafficChartData(rangeName string, deviceID string, now time.Time) (*TrafficChartData, error) {
 	_, chart, err := GetTrafficAnalysisWithChart(rangeName, deviceID, now)
 	if err != nil {
@@ -239,30 +280,50 @@ func queryTrafficCurrentRows(rangeName string, deviceID string, currentStart tim
 		Direction    bool
 		TrafficBytes int64
 	}
-	var rows []currentRow
-	var q *gorm.DB
-	if rangeName == "day" {
-		q = DB.Model(&TrafficMinute{})
-	} else {
-		q = DB.Model(&TrafficHour{})
-	}
-	q = q.Select("tag, direction, sum(traffic_bytes) as traffic_bytes").
-		Where("resource = ? AND period_start >= ? AND period_start <= ?", "iface", currentStart, now).
-		Group("tag, direction")
-	q = applyTrafficDeviceFilter(q, deviceID)
-	if err := q.Find(&rows).Error; err != nil {
-		return nil, err
+
+	// 对指定明细表按 [start, now] 聚合查询，所有行统一落在 currentStart 对应桶。
+	collect := func(model interface{}, start time.Time) ([]trafficRollupRow, error) {
+		var rows []currentRow
+		q := DB.Model(model).
+			Select("tag, direction, sum(traffic_bytes) as traffic_bytes").
+			Where("resource = ? AND period_start >= ? AND period_start <= ?", "iface", start, now).
+			Group("tag, direction")
+		q = applyTrafficDeviceFilter(q, deviceID)
+		if err := q.Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		out := make([]trafficRollupRow, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, trafficRollupRow{
+				PeriodStart:  currentStart,
+				Tag:          r.Tag,
+				Direction:    r.Direction,
+				TrafficBytes: r.TrafficBytes,
+			})
+		}
+		return out, nil
 	}
 
-	out := make([]trafficRollupRow, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, trafficRollupRow{
-			PeriodStart:  currentStart,
-			Tag:          r.Tag,
-			Direction:    r.Direction,
-			TrafficBytes: r.TrafficBytes,
-		})
+	if rangeName == "day" {
+		// 当天：历史已完成整点用 traffic_hour，当前未完成小时用 traffic_minute。
+		return collect(&TrafficMinute{}, currentStart)
 	}
+
+	// week/month 的当天部分：已完成整点（traffic_hour）：
+	//   traffic_hour 要到下个整点才由 RollupToHour 生成，因此当前未完成小时还需
+	//   读 traffic_minute，与 day 的实时口径对齐，避免「日流量 > 周/月流量」。
+	var out []trafficRollupRow
+	hourRows, err := collect(&TrafficHour{}, currentStart)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, hourRows...)
+
+	minuteRows, err := collect(&TrafficMinute{}, now.Truncate(time.Hour))
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, minuteRows...)
 	return out, nil
 }
 

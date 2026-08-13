@@ -17,7 +17,7 @@ import DeviceConfigTab from '../components/DeviceConfigTab.vue'
 import CardPolicyPanel from '../components/CardPolicyPanel.vue'
 import DeviceAddDialog from '../components/DeviceAddDialog.vue'
 import CarrierWebsheetDialog from '../components/CarrierWebsheetDialog.vue'
-import TrafficAnalysisPanel from '../components/TrafficAnalysisPanel.vue'
+import TrafficAnalysisPanel, { type TrafficBillingInfo } from '../components/TrafficAnalysisPanel.vue'
 import { usePollingScheduler } from '../composables/usePollingScheduler'
 import { useEventStream } from '../composables/useEventStream'
 import { useDevicesStore } from '../stores/devices'
@@ -91,6 +91,19 @@ const deviceAnalysisLoading = ref(false)
 const deviceAnalysisLastOkAt = ref<number | null>(null)
 const deviceAnalysisError = ref<AppError | null>(null)
 const deviceAnalysisRange = ref<TrafficRange>('day')
+
+// 计费月流量（第 4 个数值框）：复用卡策略已拉取的 quota_usage（本计费周期已用 + 套餐/阈值 + 周期日期）
+const deviceBillingInfo = computed<TrafficBillingInfo | null>(() => {
+  const u = cardPolicy.value?.quota_usage
+  if (!u) return null
+  return {
+    used_bytes: u.used_bytes,
+    threshold_bytes: u.threshold_bytes,
+    quota_bytes: u.quota_bytes,
+    period_start: u.period_start,
+    period_end: u.period_end
+  }
+})
 
 const addableDiscovered = computed(() => discovered.value.filter((item) => !item.configured))
 
@@ -1311,6 +1324,7 @@ usePollingScheduler(async () => {
                   subtitle="数据每分钟采样一次，按日/周/月聚合"
                   :disabled="!selectedDevice?.network_connected"
                   :device-label="selectedDevice?.name || selectedDevice?.id"
+                  :billing="deviceBillingInfo"
                   @update:range="handleDeviceTrafficRangeChange"
                   @refresh="refreshCurrentDeviceTrafficAnalysis"
                 />

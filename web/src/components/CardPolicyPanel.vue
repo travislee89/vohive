@@ -7,6 +7,7 @@ import type { CardPolicy } from '../types/api'
 import { devicesService } from '../services/devices'
 import { cardsService } from '../services/cards'
 import { errorMessage } from '../services/http'
+import { formatISODate } from '../utils/datetime'
 
 const props = defineProps<{
   deviceId: string | undefined
@@ -82,9 +83,7 @@ function formatBytesLocal(bytes: number): string {
 }
 
 function formatPeriod(ts?: string): string {
-  if (!ts) return '--'
-  const d = new Date(ts)
-  return Number.isFinite(d.getTime()) ? d.toLocaleDateString() : '--'
+  return formatISODate(ts)
 }
 
 // 上游 policy 变化时原地同步各字段（不整体替换对象，避免 el-switch 崩溃）

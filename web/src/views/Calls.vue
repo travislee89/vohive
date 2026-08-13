@@ -13,6 +13,7 @@ import { callsService } from '../services/calls'
 import { toAppError } from '../services/http'
 import { api } from '../stores/auth'
 import type { CSCallEvent, CSCallInfo, CSCallListResponse, DeviceMgmtListItem } from '../types/api'
+import { formatISOTime } from '../utils/datetime'
 
 const route = useRoute()
 const router = useRouter()
@@ -64,7 +65,7 @@ function directionIcon(direction: string) {
 
 function formatTime(ts: number) {
   if (!ts) return ''
-  return new Date(ts * 1000).toLocaleTimeString()
+  return formatISOTime(ts * 1000)
 }
 
 async function fetchDevices() {

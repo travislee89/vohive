@@ -15,6 +15,7 @@ import {
 } from '@vicons/fluent'
 import { AT_TEMPLATES } from '../constants/atTemplates'
 import { devicesService } from '../services/devices'
+import { formatISOTime } from '../utils/datetime'
 
 const props = defineProps<{
   deviceId: string
@@ -304,7 +305,7 @@ function clearATHistory() {
                 <div class="flex w-full justify-end">
                   <div class="max-w-[88%] bg-blue-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 shadow-sm">
                     <div class="text-sm font-mono break-words">{{ h.cmd }}</div>
-                    <div class="text-[10px] text-blue-100 mt-1 text-right">{{ new Date(h.ts).toLocaleTimeString() }}</div>
+                    <div class="text-[10px] text-blue-100 mt-1 text-right">{{ formatISOTime(h.ts) }}</div>
                   </div>
                 </div>
 
@@ -312,7 +313,7 @@ function clearATHistory() {
                   <div class="max-w-[88%] rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm" :class="!h.ok ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-900/50' : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-100 dark:border-white/5'">
                     <div class="text-sm whitespace-pre-wrap break-words font-mono leading-relaxed">{{ h.response }}</div>
                     <div class="text-[10px] mt-1 text-gray-400 flex items-center gap-2">
-                      <span>{{ new Date(h.ts).toLocaleTimeString() }}</span>
+                      <span>{{ formatISOTime(h.ts) }}</span>
                     </div>
                   </div>
                 </div>
