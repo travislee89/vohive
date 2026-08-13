@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { formatISODateTime } from '../utils/datetime'
 
 const props = defineProps<{
   title?: string
@@ -22,7 +23,7 @@ const metaText = computed(() => {
   const method = (props.requestMethod || '').toUpperCase()
   if (method && props.requestUrl) parts.push(`${method} ${props.requestUrl}`)
   else if (props.requestUrl) parts.push(String(props.requestUrl))
-  if (props.lastSuccessAt) parts.push(`最后成功：${new Date(props.lastSuccessAt).toLocaleString()}`)
+  if (props.lastSuccessAt) parts.push(`最后成功：${formatISODateTime(props.lastSuccessAt)}`)
   return parts.join(' · ')
 })
 </script>

@@ -15,10 +15,26 @@ export type TrafficChart = {
   devices: string[]
   series: Record<string, number[]>
 }
-export type TrafficAnalysis = { buckets: TrafficBucket[]; chart: TrafficChart | null }
+export type TrafficTotal = {
+  rx_bytes: number
+  tx_bytes: number
+  total_bytes: number
+}
+export type TrafficRangeTotals = {
+  day: TrafficTotal
+  week: TrafficTotal
+  month: TrafficTotal
+}
+export const EMPTY_TRAFFIC_TOTAL: TrafficTotal = { rx_bytes: 0, tx_bytes: 0, total_bytes: 0 }
+export const EMPTY_TRAFFIC_RANGE_TOTALS: TrafficRangeTotals = {
+  day: EMPTY_TRAFFIC_TOTAL,
+  week: EMPTY_TRAFFIC_TOTAL,
+  month: EMPTY_TRAFFIC_TOTAL
+}
+export type TrafficAnalysis = { buckets: TrafficBucket[]; chart: TrafficChart | null; summary: TrafficRangeTotals }
 
 export function createEmptyTrafficAnalysis(): TrafficAnalysis {
-  return { buckets: [], chart: null }
+  return { buckets: [], chart: null, summary: EMPTY_TRAFFIC_RANGE_TOTALS }
 }
 
 export const trafficService = {
@@ -29,9 +45,16 @@ export const trafficService = {
         params.device_id = deviceId.trim()
       }
       const res = await api.get('/traffic/analysis', { params, signal })
+      const data = res?.data
+      const summary = data?.summary || EMPTY_TRAFFIC_RANGE_TOTALS
       return {
-        buckets: (res?.data?.buckets || []) as TrafficBucket[],
-        chart: (res?.data?.chart || null) as TrafficChart | null
+        buckets: (data?.buckets || []) as TrafficBucket[],
+        chart: (data?.chart || null) as TrafficChart | null,
+        summary: {
+          day: summary.day || EMPTY_TRAFFIC_TOTAL,
+          week: summary.week || EMPTY_TRAFFIC_TOTAL,
+          month: summary.month || EMPTY_TRAFFIC_TOTAL
+        }
       } as TrafficAnalysis
     })
   }

@@ -253,6 +253,85 @@ func TestGetTrafficAnalysisDayKeepsRepeatedHourLabelsSeparate(t *testing.T) {
 	}
 }
 
+func TestGetTrafficRangeTotals(t *testing.T) {
+	now := initTrafficTestDB(t)
+
+	hourStart := time.Date(2026, time.March, 30, 13, 0, 0, 0, time.UTC) // 今天 13:00（近24h、本周、本月内）
+	prevDay := time.Date(2026, time.March, 29, 0, 0, 0, 0, time.UTC)    // 昨天（本周、本月内，超过24h窗口）
+	tenDaysAgo := time.Date(2026, time.March, 20, 0, 0, 0, 0, time.UTC) // 10天前（本月内，超过本周窗口）
+
+	// dev-a
+	mustInsertTrafficHour(t, now, hourStart, "dev-a@wwan0", false, 100)
+	mustInsertTrafficHour(t, now, hourStart, "dev-a@wwan0", true, 40)
+	mustInsertTrafficDay(t, now, prevDay, "dev-a@wwan0", false, 500)
+	mustInsertTrafficDay(t, now, prevDay, "dev-a@wwan0", true, 50)
+	mustInsertTrafficDay(t, now, tenDaysAgo, "dev-a@wwan0", false, 800)
+	mustInsertTrafficDay(t, now, tenDaysAgo, "dev-a@wwan0", true, 60)
+
+	// dev-b（验证设备过滤）
+	mustInsertTrafficHour(t, now, hourStart, "dev-b@wwan0", false, 7)
+	mustInsertTrafficHour(t, now, hourStart, "dev-b@wwan0", true, 3)
+	mustInsertTrafficDay(t, now, prevDay, "dev-b@wwan0", false, 20)
+	mustInsertTrafficDay(t, now, prevDay, "dev-b@wwan0", true, 4)
+	mustInsertTrafficDay(t, now, tenDaysAgo, "dev-b@wwan0", false, 30)
+	mustInsertTrafficDay(t, now, tenDaysAgo, "dev-b@wwan0", true, 2)
+
+	// 全局汇总
+	global, err := GetTrafficRangeTotals("", now)
+	if err != nil {
+		t.Fatalf("GetTrafficRangeTotals(global) error = %v", err)
+	}
+	assertTrafficTotal(t, global.Day, 107, 43, 150)
+	assertTrafficTotal(t, global.Week, 627, 97, 724)
+	assertTrafficTotal(t, global.Month, 1457, 159, 1616)
+
+	// dev-a 过滤
+	filtered, err := GetTrafficRangeTotals("dev-a", now)
+	if err != nil {
+		t.Fatalf("GetTrafficRangeTotals(filtered) error = %v", err)
+	}
+	assertTrafficTotal(t, filtered.Day, 100, 40, 140)
+	assertTrafficTotal(t, filtered.Week, 600, 90, 690)
+	assertTrafficTotal(t, filtered.Month, 1400, 150, 1550)
+}
+
+func assertTrafficTotal(t *testing.T, got TrafficTotal, rx int64, tx int64, total int64) {
+	t.Helper()
+	if got.RxBytes != rx || got.TxBytes != tx || got.TotalBytes != total {
+		t.Fatalf("traffic total mismatch: got=(rx=%d tx=%d total=%d) want=(rx=%d tx=%d total=%d)",
+			got.RxBytes, got.TxBytes, got.TotalBytes, rx, tx, total)
+	}
+}
+
+func TestGetTrafficRangeTotalsIncludesCurrentHourInWeekMonth(t *testing.T) {
+	now := initTrafficTestDB(t)
+
+	currentHourStart := time.Date(2026, time.March, 30, 15, 0, 0, 0, time.UTC)  // 当前未完成小时
+	todayHour := time.Date(2026, time.March, 30, 10, 0, 0, 0, time.UTC)          // 今天已完成整点
+	prevDay := time.Date(2026, time.March, 29, 0, 0, 0, 0, time.UTC)             // 昨天（历史 days 桶）
+
+	// 当前小时流量占主导：若 week/month 漏掉当前小时，会得到 week < day。
+	mustInsertTrafficDay(t, now, prevDay, "dev-a@wwan0", false, 5)
+	mustInsertTrafficHour(t, now, todayHour, "dev-a@wwan0", false, 5)
+	mustInsertTrafficMinute(t, now, currentHourStart.Add(5*time.Minute), "dev-a@wwan0", false, 100)
+
+	totals, err := GetTrafficRangeTotals("dev-a", now)
+	if err != nil {
+		t.Fatalf("GetTrafficRangeTotals() error = %v", err)
+	}
+
+	// day = 当前小时分钟(100) + 今天已完成整点(5)
+	assertTrafficTotal(t, totals.Day, 105, 0, 105)
+	// week/month = 昨天(5) + 今天整点(5) + 当前小时分钟(100)：必须包含当前小时
+	assertTrafficTotal(t, totals.Week, 110, 0, 110)
+	assertTrafficTotal(t, totals.Month, 110, 0, 110)
+
+	if totals.Day.TotalBytes > totals.Week.TotalBytes {
+		t.Fatalf("day(%d) should not exceed week(%d): current hour must be counted in week/month",
+			totals.Day.TotalBytes, totals.Week.TotalBytes)
+	}
+}
+
 type trafficSelectCounter struct {
 	count atomic.Int64
 }

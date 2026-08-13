@@ -24,10 +24,15 @@ func (s *Server) handleTrafficAnalysis(c *gin.Context) {
 		return
 	}
 
+	// 同时聚合 day/week/month 三个范围的下载/上传/合计，供概览数值框一次取全，
+	// 无需前端再按 tab 分别请求。
+	summary, _ := db.GetTrafficRangeTotals(deviceID, now)
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
 		"range":   rng,
 		"buckets": buckets,
 		"chart":   chartData,
+		"summary": summary,
 	})
 }

@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { debugCollector } from '../debug/collector'
 import { copyToClipboard } from '../utils/clipboard'
+import { formatCompactStamp, formatISODateTime } from '../utils/datetime'
 
 const props = defineProps<{
   modelValue: boolean
@@ -35,7 +36,7 @@ watch(
 )
 
 function fmtTs(ts: number) {
-  return new Date(ts).toLocaleString()
+  return formatISODateTime(ts)
 }
 
 async function copySnapshot() {
@@ -45,7 +46,7 @@ async function copySnapshot() {
 function downloadSnapshot() {
   try {
     const now = new Date()
-    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+    const stamp = formatCompactStamp(now)
     const blob = new Blob([JSON.stringify(debugCollector.sanitizedSnapshot(), null, 2)], { type: 'application/json;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

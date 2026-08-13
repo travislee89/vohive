@@ -2166,6 +2166,31 @@ components:
         chart:
           type: object
           additionalProperties: true
+        summary:
+          $ref: '#/components/schemas/TrafficRangeTotals'
+
+    TrafficRangeTotals:
+      type: object
+      properties:
+        day:
+          $ref: '#/components/schemas/TrafficTotal'
+        week:
+          $ref: '#/components/schemas/TrafficTotal'
+        month:
+          $ref: '#/components/schemas/TrafficTotal'
+
+    TrafficTotal:
+      type: object
+      properties:
+        rx_bytes:
+          type: integer
+          format: int64
+        tx_bytes:
+          type: integer
+          format: int64
+        total_bytes:
+          type: integer
+          format: int64
 
     SMSSendRequest:
       type: object
