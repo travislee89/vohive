@@ -498,7 +498,7 @@ function handleRangeChange(value: string | number | boolean | undefined) {
           @click="emit('rollup')"
         >
           <el-icon><ArrowSync24Regular /></el-icon>
-          补偿/回填
+          回填
         </el-button>
       </div>
     </div>
