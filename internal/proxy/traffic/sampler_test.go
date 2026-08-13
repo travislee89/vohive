@@ -235,6 +235,71 @@ func TestSampleSkipsInactiveNetworkAndClearsInterfaceBaseline(t *testing.T) {
 	}
 }
 
+func TestFlushFinalWritesPartialMinuteAndCardQuota(t *testing.T) {
+	initSamplerTrafficTestDB(t)
+	const iccid = "89860000000000000001"
+	if err := db.UpsertCardPolicy(db.CardPolicy{
+		ICCID:           iccid,
+		QuotaEnabled:    true,
+		BillingDay:      1,
+		BillingTimezone: "UTC",
+	}); err != nil {
+		t.Fatalf("UpsertCardPolicy error = %v", err)
+	}
+
+	readCount := 0
+	sampler := New(Options{
+		workerInterfaces: func() []workerInterface {
+			return []workerInterface{{
+				id:     "dev-a",
+				iface:  "wwan0",
+				source: trafficCounterSourceQMIWDS,
+				currentICCID: func() string {
+					return iccid
+				},
+				readCounters: func(context.Context) (trafficCounters, error) {
+					readCount++
+					return trafficCounters{RXBytes: 2000, TXBytes: 1500}, nil
+				},
+			}}
+		},
+	})
+	// 基线取自上一次整分钟采样；退出时 flushFinal 应把 [基线,现在] 的增量落库。
+	sampler.lastIface[counterBaselineKey("dev-a", "wwan0", trafficCounterSourceQMIWDS)] = trafficCounters{RXBytes: 1000, TXBytes: 500}
+
+	// 未调用 Start（无 goroutine）直接 Stop 只触发一次 flushFinal。
+	sampler.Stop()
+
+	gotPeriod, rx, tx, err := db.GetLatestMinuteDeltas("iface", "dev-a@wwan0")
+	if err != nil {
+		t.Fatalf("GetLatestMinuteDeltas() error = %v", err)
+	}
+	if gotPeriod.IsZero() {
+		t.Fatal("expected a traffic_minute row to be written on shutdown flush")
+	}
+	if rx != 1000 || tx != 1000 {
+		t.Fatalf("rx=%d tx=%d want both 1000 (delta since baseline)", rx, tx)
+	}
+	if readCount != 1 {
+		t.Fatalf("readCount=%d want 1 (single final flush)", readCount)
+	}
+
+	usage, err := db.GetCardQuotaUsage(iccid)
+	if err != nil {
+		t.Fatalf("GetCardQuotaUsage() error = %v", err)
+	}
+	if usage.UsedBytes != 2000 {
+		t.Fatalf("card quota used_bytes=%d want 2000 (rx1000+tx1000)", usage.UsedBytes)
+	}
+
+	// 幂等：再次 Stop 不应触发重复 flush（用量/读数不再增加）。
+	readCountAfter := readCount
+	sampler.Stop()
+	if readCount != readCountAfter {
+		t.Fatalf("second Stop re-flushed: readCount=%d want %d", readCount, readCountAfter)
+	}
+}
+
 func initSamplerTrafficTestDB(t *testing.T) {
 	t.Helper()
 	if err := db.Init(filepath.Join(t.TempDir(), "traffic.db")); err != nil {

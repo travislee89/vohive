@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/boa-z/quectel-qmi-go/pkg/qmi"
@@ -27,6 +28,9 @@ const (
 type Sampler struct {
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	stopOnce sync.Once
+	started  sync.WaitGroup
 
 	pool *device.Pool
 	mgr  *server.Manager
@@ -76,13 +80,100 @@ func New(opts Options) *Sampler {
 }
 
 func (s *Sampler) Stop() {
-	s.cancel()
+	s.stopOnce.Do(func() {
+		s.cancel()
+		// 等待采样/回填 goroutine 退出，避免与 flushFinal 并发读写 lastIface/DB。
+		s.started.Wait()
+		// 补上最后一次整分钟采样之后、进程退出前的部分分钟流量增量，
+		// 写入 traffic_minute 与 card_quota_usage，下次启动的上卷回填会将其纳入日/周/月汇总。
+		s.flushFinal()
+	})
 }
 
 func (s *Sampler) Start() {
-	s.primeIfaceBaselines()
-	go s.loop()
-	go s.backfillLoop()
+	s.started.Add(2)
+	go func() {
+		defer s.started.Done()
+		s.loop()
+	}()
+	go func() {
+		defer s.started.Done()
+		s.backfillLoop()
+	}()
+}
+
+// flushFinal 在进程优雅退出时执行一次“最终采样”，把自上一次整分钟采样以来的
+// 部分分钟增量落库（traffic_minute + 卡流量用量），并同步更新基线，
+// 确保与正常采样路径不重复计数。幂等：仅在 Stop 中调用一次。
+func (s *Sampler) flushFinal() {
+	now := time.Now()
+	periodStart := now.Truncate(time.Minute)
+
+	var points []db.TrafficPoint
+
+	for _, wi := range s.workerInterfaces() {
+		if wi.id == "" || wi.iface == "" {
+			continue
+		}
+		if !wi.shouldSampleTraffic() {
+			s.clearWorkerInterfaceBaseline(wi)
+			continue
+		}
+		cur, source, err := s.readWorkerCounters(wi)
+		if err != nil {
+			s.logCounterReadError(wi.id, wi.iface, source, err)
+			continue
+		}
+		key := counterBaselineKey(wi.id, wi.iface, source)
+		last, ok := s.lastIface[key]
+		s.lastIface[key] = cur
+		if !ok {
+			continue
+		}
+		drx := int64(cur.RXBytes) - int64(last.RXBytes)
+		dtx := int64(cur.TXBytes) - int64(last.TXBytes)
+		if drx < 0 {
+			drx = 0
+		}
+		if dtx < 0 {
+			dtx = 0
+		}
+		if drx == 0 && dtx == 0 {
+			continue
+		}
+		points = append(points,
+			db.TrafficPoint{PeriodStart: periodStart, Resource: "iface", Tag: ifaceBaselineKey(wi.id, wi.iface), Direction: false, TrafficBytes: drx},
+			db.TrafficPoint{PeriodStart: periodStart, Resource: "iface", Tag: ifaceBaselineKey(wi.id, wi.iface), Direction: true, TrafficBytes: dtx},
+		)
+		// 累加到 per-ICCID 卡流量用量（仅当该卡启用了流量限制时）
+		if wi.currentICCID != nil {
+			if iccid := strings.TrimSpace(wi.currentICCID()); iccid != "" {
+				if pol, perr := db.GetCardPolicy(iccid); perr == nil && pol.QuotaEnabled {
+					if _, aerr := db.AccumulateCardQuotaUsage(iccid, drx+dtx, pol.BillingDay, pol.BillingTimezone, now); aerr != nil {
+						logger.Warn("退出时累加卡流量用量失败", "iccid", iccid, "err", aerr)
+					}
+				}
+			}
+		}
+	}
+
+	// 补上代理实例在最后一次采样后的流量增量。
+	if s.mgr != nil {
+		for instID, snap := range s.mgr.SnapshotAndResetTraffic() {
+			if snap.Downlink > 0 {
+				points = append(points, db.TrafficPoint{PeriodStart: periodStart, Resource: "proxy_instance", Tag: instID, Direction: false, TrafficBytes: snap.Downlink})
+			}
+			if snap.Uplink > 0 {
+				points = append(points, db.TrafficPoint{PeriodStart: periodStart, Resource: "proxy_instance", Tag: instID, Direction: true, TrafficBytes: snap.Uplink})
+			}
+		}
+	}
+
+	if len(points) > 0 {
+		if err := db.UpsertTrafficMinute(points); err != nil {
+			logger.Warn("退出时写入流量分钟桶失败", "err", err)
+		}
+	}
 }
 
 func (s *Sampler) loop() {
