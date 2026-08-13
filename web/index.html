@@ -12,11 +12,9 @@
   <script>
     try {
       const theme = localStorage.getItem('theme')
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark')
-      } else {
-        document.documentElement.classList.remove('dark')
-      }
+      const sysDark = !!window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      const dark = theme === 'dark' || (theme === 'auto' && sysDark)
+      document.documentElement.classList.toggle('dark', dark)
     } catch { }
   </script>
   <style>

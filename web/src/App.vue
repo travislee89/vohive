@@ -1,33 +1,55 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import LoadingScreen from './components/LoadingScreen.vue'
+import {
+  applyDarkClass,
+  getSystemDark,
+  resolveDark,
+  THEME_KEY,
+  THEME_ORDER,
+  type ThemeMode
+} from './theme'
 
 const route = useRoute()
 const auth = useAuthStore()
 
-const isDark = ref(localStorage.getItem('theme') === 'dark')
+const stored = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? 'light'
+const theme = ref<ThemeMode>(stored === 'dark' || stored === 'auto' || stored === 'light' ? stored : 'light')
+
+const systemDark = ref(getSystemDark())
+let mediaQuery: MediaQueryList | null = null
+const onSystemChange = (e: MediaQueryListEvent) => {
+  systemDark.value = e.matches
+}
+
+const isDark = computed(() => resolveDark(theme.value, systemDark.value))
 
 function toggleTheme() {
-  isDark.value = !isDark.value
-  const mode = isDark.value ? 'dark' : 'light'
-  localStorage.setItem('theme', mode)
-  updateHtmlClass(mode)
+  const idx = THEME_ORDER.indexOf(theme.value)
+  theme.value = THEME_ORDER[(idx + 1) % THEME_ORDER.length]
 }
 
-function updateHtmlClass(mode: 'dark' | 'light') {
-  if (mode === 'dark') {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
-}
+watch(isDark, (dark) => applyDarkClass(dark), { immediate: true })
+watch(
+  theme,
+  (mode) => {
+    localStorage.setItem(THEME_KEY, mode)
+  },
+  { immediate: true }
+)
 
 onMounted(() => {
-  if (isDark.value) {
-    updateHtmlClass('dark')
+  if (typeof window !== 'undefined') {
+    mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)') ?? null
+    mediaQuery?.addEventListener('change', onSystemChange)
   }
+})
+
+onUnmounted(() => {
+  mediaQuery?.removeEventListener('change', onSystemChange)
+  mediaQuery = null
 })
 
 const AuthenticatedShell = defineAsyncComponent(() => import('./layouts/AuthenticatedShell.vue'))
@@ -41,7 +63,7 @@ const shell = computed(() =>
   <div class="h-screen w-screen overflow-hidden bg-gray-50 dark:bg-[#101014] text-gray-900 dark:text-gray-100 font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-300">
     <Suspense>
       <template #default>
-        <component :is="shell" :is-dark="isDark" @toggle-theme="toggleTheme" />
+        <component :is="shell" :theme="theme" @toggle-theme="toggleTheme" />
       </template>
       <template #fallback>
         <LoadingScreen />

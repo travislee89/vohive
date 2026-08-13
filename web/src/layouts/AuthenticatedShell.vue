@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch, type PropType } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { Expand, Fold } from '@element-plus/icons-vue'
@@ -7,6 +7,7 @@ import LoadingScreen from '../components/LoadingScreen.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import SwitchDark from '../components/SwitchDark.vue'
 import { debugCollector } from '../debug/collector'
+import type { ThemeMode } from '../theme'
 import {
   Mail24Regular,
   Settings24Regular,
@@ -19,8 +20,8 @@ import {
 } from '@vicons/fluent'
 
 defineProps({
-  isDark: {
-    type: Boolean,
+  theme: {
+    type: String as PropType<ThemeMode>,
     required: true
   }
 })
@@ -218,7 +219,7 @@ const activePath = computed(() => route.path)
         </div>
 
         <div class="flex items-center gap-3">
-          <SwitchDark :is-dark="isDark" @toggle="(e) => emit('toggle-theme', e)" />
+          <SwitchDark :theme="theme" @toggle="() => emit('toggle-theme')" />
 
           <div class="hidden sm:flex items-center justify-center w-7 h-7 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 shadow-sm">
             <span class="relative flex h-2 w-2">
