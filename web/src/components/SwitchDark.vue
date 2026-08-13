@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { WeatherMoon24Regular, WeatherSunny24Regular, BrightnessHigh24Regular } from '@vicons/fluent'
+import { WeatherMoon24Regular, WeatherSunny24Regular, CircleHalfFill24Regular } from '@vicons/fluent'
 import type { ThemeMode } from '../theme'
 
 const props = defineProps<{
@@ -21,8 +21,8 @@ const label = computed(() => MODE_LABEL[props.theme])
 
 const icon = computed(() => {
   if (props.theme === 'dark') return WeatherSunny24Regular
-  if (props.theme === 'auto') return BrightnessHigh24Regular
-  return WeatherMoon24Regular
+  if (props.theme === 'light') return WeatherMoon24Regular
+  return CircleHalfFill24Regular
 })
 
 function onToggle() {
