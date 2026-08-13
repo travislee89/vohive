@@ -19,6 +19,9 @@ const (
 	trafficCounterReadTimeout = 3 * time.Second
 
 	qmiWDSTrafficStatsMask = qmi.WDSPacketStatsTxBytesOK | qmi.WDSPacketStatsRxBytesOK
+
+	defaultBackfillHorizon  = 31
+	defaultBackfillInterval = 1 * time.Hour
 )
 
 type Sampler struct {
@@ -79,6 +82,7 @@ func (s *Sampler) Stop() {
 func (s *Sampler) Start() {
 	s.primeIfaceBaselines()
 	go s.loop()
+	go s.backfillLoop()
 }
 
 func (s *Sampler) loop() {
@@ -108,6 +112,25 @@ func (s *Sampler) loop() {
 			next = now.Truncate(time.Minute).Add(time.Minute)
 		}
 		timer.Reset(time.Until(next))
+	}
+}
+
+// backfillLoop 周期性执行流量上卷回填，补偿因进程停机/重启导致的遗漏。
+// 使用独立 goroutine，不阻塞采样主循环；幂等执行，出错仅记录日志。
+func (s *Sampler) backfillLoop() {
+	// 启动时立即执行一次回填
+	_, _ = db.BackfillTraffic(time.Now(), defaultBackfillHorizon)
+
+	ticker := time.NewTicker(defaultBackfillInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			_, _ = db.BackfillTraffic(time.Now(), defaultBackfillHorizon)
+		}
 	}
 }
 

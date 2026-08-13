@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,5 +35,32 @@ func (s *Server) handleTrafficAnalysis(c *gin.Context) {
 		"buckets": buckets,
 		"chart":   chartData,
 		"summary": summary,
+	})
+}
+
+// handleTrafficRollup 手动触发流量上卷回填
+// POST /api/traffic/rollup?horizon=31
+func (s *Server) handleTrafficRollup(c *gin.Context) {
+	horizon := 31
+	if v := c.Query("horizon"); v != "" {
+		if h, err := strconv.Atoi(v); err == nil && h >= 1 && h <= 93 {
+			horizon = h
+		}
+	}
+
+	result, err := db.BackfillTraffic(time.Now(), horizon)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+		"rollup": gin.H{
+			"horizon_days": result.HorizonDays,
+			"days":         result.Days,
+			"weeks":        result.Weeks,
+			"months":       result.Months,
+		},
 	})
 }

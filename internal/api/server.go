@@ -240,6 +240,7 @@ func (s *Server) newRouter() *gin.Engine {
 		api.GET("/devices/:device_id/status", s.handleStatusDetail) // 获取单个设备详细状态
 		api.GET("/health", s.handleHealth)                          // 健康检查（外部监控用）
 		api.GET("/traffic/analysis", s.handleTrafficAnalysis)       // 流量分析统计
+		api.POST("/traffic/rollup", s.handleTrafficRollup)          // 手动触发流量上卷回填
 
 		// ===== 短信 =====
 		api.POST("/sms/send", s.handleSendSMS)                    // 发送短信（自动选择 AT 或 VoWiFi）

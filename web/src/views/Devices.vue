@@ -28,7 +28,7 @@ import { isControlOnline, isRecoveryPhase } from '../utils/deviceLifecycle'
 import { getMccMncIndex, isoToFlagEmoji, type MccMncRow } from '../utils/mcc-mnc'
 import type { CardPolicy, CarrierWebsheetInfo, DeviceConfigDTO, DeviceMgmtListItem, DeviceOverviewItem, DiscoveredDevice, ModemStatus, PNNRecord, RealtimeTrafficSnapshot } from '../types/api'
 import type { AppError } from '../types/domain'
-import { toAppError } from '../services/http'
+import { toAppError, errorMessage } from '../services/http'
 import { devicesService } from '../services/devices'
 import { cardsService } from '../services/cards'
 import { createEmptyTrafficAnalysis, trafficService, type TrafficRange } from '../services/traffic'
@@ -91,6 +91,7 @@ const deviceAnalysisLoading = ref(false)
 const deviceAnalysisLastOkAt = ref<number | null>(null)
 const deviceAnalysisError = ref<AppError | null>(null)
 const deviceAnalysisRange = ref<TrafficRange>('day')
+const deviceRollupLoading = ref(false)
 
 // 计费月流量（第 4 个数值框）：复用卡策略已拉取的 quota_usage（本计费周期已用 + 套餐/阈值 + 周期日期）
 const deviceBillingInfo = computed<TrafficBillingInfo | null>(() => {
@@ -1065,6 +1066,19 @@ function refreshCurrentDeviceTrafficAnalysis() {
   void fetchDeviceTrafficAnalysis(detail.id)
 }
 
+async function triggerDeviceTrafficRollup() {
+  if (deviceRollupLoading.value) return
+  deviceRollupLoading.value = true
+  const res = await trafficService.rollup()
+  deviceRollupLoading.value = false
+  if (!res.ok) {
+    ElMessage.error(errorMessage(res.error, '回填失败'))
+    return
+  }
+  ElMessage.success(`回填完成：补跑 ${res.data?.days ?? 0} 天 / ${res.data?.weeks ?? 0} 周 / ${res.data?.months ?? 0} 月`)
+  refreshCurrentDeviceTrafficAnalysis()
+}
+
 function handleDeviceTrafficRangeChange(range: TrafficRange) {
   if (deviceAnalysisRange.value === range) return
   deviceAnalysisRange.value = range
@@ -1325,8 +1339,11 @@ usePollingScheduler(async () => {
                   :disabled="!selectedDevice?.network_connected"
                   :device-label="selectedDevice?.name || selectedDevice?.id"
                   :billing="deviceBillingInfo"
+                  show-rollup
+                  :rollup-loading="deviceRollupLoading"
                   @update:range="handleDeviceTrafficRangeChange"
                   @refresh="refreshCurrentDeviceTrafficAnalysis"
+                  @rollup="triggerDeviceTrafficRollup"
                 />
               </div>
             </el-tab-pane>
