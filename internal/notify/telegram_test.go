@@ -83,3 +83,35 @@ func TestCommandMenuEqual(t *testing.T) {
 		t.Fatalf("commandMenuEqual(nil, []) = false, want true")
 	}
 }
+
+func TestParseCallbackData(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		data  string
+		route string
+		args  []string
+	}{
+		{"status:ec20_1", "status", []string{"ec20_1"}},
+		{"switch:ec20_1:2", "switch", []string{"ec20_1", "2"}},
+		{"esim", "esim", nil},
+		{"rotate:dev1:dev2", "rotate", []string{"dev1", "dev2"}},
+		{"send:ec20_1:+8613800000000:hi", "send", []string{"ec20_1", "+8613800000000", "hi"}},
+		{"", "", nil},
+	}
+
+	for _, c := range cases {
+		route, args := parseCallbackData(c.data)
+		if route != c.route {
+			t.Fatalf("parseCallbackData(%q) route = %q, want %q", c.data, route, c.route)
+		}
+		if len(args) != len(c.args) {
+			t.Fatalf("parseCallbackData(%q) args = %v, want %v", c.data, args, c.args)
+		}
+		for i := range c.args {
+			if args[i] != c.args[i] {
+				t.Fatalf("parseCallbackData(%q) args = %v, want %v", c.data, args, c.args)
+			}
+		}
+	}
+}

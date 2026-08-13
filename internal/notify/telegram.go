@@ -182,6 +182,36 @@ func (c *tgCommandContext) Reply(text string) {
 	}()
 }
 
+// ShowDevicePicker 实现 MenuContext：通过 Telegram 内联键盘让用户点选设备或 eSIM 配置。
+// 按钮回调数据形如 "route:value"（value 可为单级设备 ID，或多级 "设备ID:序号"）。
+func (c *tgCommandContext) ShowDevicePicker(prompt, route string, items []MenuItem) error {
+	if c == nil || c.channel == nil || c.channel.api == nil {
+		return nil
+	}
+
+	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items))
+	for _, it := range items {
+		data := route
+		if it.Value != "" {
+			data = route + ":" + it.Value
+		}
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(it.Label, data),
+		))
+	}
+
+	msg := tgbotapi.NewMessage(c.channel.chatID, prompt)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	// 异步发送，避免阻塞命令处理主循环
+	go func() {
+		if _, err := c.channel.api.Send(msg); err != nil {
+			logger.Error("发送 Telegram 交互菜单失败", "err", err)
+		}
+	}()
+	return nil
+}
+
 // Start 启动 Telegram long-polling 命令监听（阻塞式）
 func (t *TelegramChannel) Start() error {
 	if t == nil || t.api == nil {
@@ -195,6 +225,10 @@ func (t *TelegramChannel) Start() error {
 	logger.Info("Telegram Bot 命令监听已启动")
 
 	for update := range updates {
+		if update.CallbackQuery != nil {
+			t.handleCallback(update.CallbackQuery)
+			continue
+		}
 		if update.Message == nil || !update.Message.IsCommand() {
 			continue
 		}
@@ -223,6 +257,60 @@ func (t *TelegramChannel) Start() error {
 		}
 	}
 	return nil
+}
+
+// interactiveRoutes 允许通过 callback（内联键盘点选）触发的命令白名单。
+// 刻意排除 /send、/vocall：两者含自由文本参数，不能由可伪造的 callback data 触发。
+var interactiveRoutes = map[string]bool{
+	"status": true,
+	"esim":   true,
+	"rotate": true,
+	"switch": true,
+}
+
+// handleCallback 处理内联键盘回调（callback_query）
+func (t *TelegramChannel) handleCallback(cb *tgbotapi.CallbackQuery) {
+	if cb == nil {
+		return
+	}
+	// 仅处理来自授权会话的回调，防止越权
+	if cb.Message == nil || cb.Message.Chat.ID != t.chatID {
+		return
+	}
+	// 应答回调，消除客户端加载态
+	if _, err := t.api.Request(tgbotapi.NewCallback(cb.ID, "")); err != nil {
+		logger.Warn("应答 Telegram 回调失败", "err", err)
+	}
+
+	route, args := parseCallbackData(cb.Data)
+	// 仅允许白名单内的交互命令，防止伪造 callback data 触发 /send、/vocall 等
+	if !interactiveRoutes[route] {
+		logger.Warn("忽略非交互回调", "route", route, "data", cb.Data)
+		return
+	}
+	handler, ok := t.handlers[route]
+	if !ok {
+		logger.Warn("回调命令未注册", "route", route)
+		return
+	}
+
+	logger.Info("收到 Telegram 回调", "route", route, "args", args)
+	ctx := &tgCommandContext{channel: t}
+	resp := handler(ctx, args)
+	if resp != "" {
+		ctx.Reply(resp)
+	}
+}
+
+// parseCallbackData 解析回调数据 "route:arg1:arg2..." 为路由与参数切片
+func parseCallbackData(data string) (string, []string) {
+	parts := strings.SplitN(data, ":", 2)
+	route := parts[0]
+	var args []string
+	if len(parts) == 2 && parts[1] != "" {
+		args = strings.Split(parts[1], ":")
+	}
+	return route, args
 }
 
 func (t *TelegramChannel) Close() error {
