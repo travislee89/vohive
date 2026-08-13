@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import type { PropType } from 'vue'
 import LoadingScreen from '../components/LoadingScreen.vue'
 import SwitchDark from '../components/SwitchDark.vue'
+import type { ThemeMode } from '../theme'
 
 defineProps({
-  isDark: {
-    type: Boolean,
+  theme: {
+    type: String as PropType<ThemeMode>,
     required: true
   }
 })
@@ -15,7 +17,7 @@ const emit = defineEmits(['toggle-theme'])
 <template>
   <div class="h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-950 transition-colors duration-300">
     <div class="absolute top-4 right-4 z-50">
-      <SwitchDark :is-dark="isDark" @toggle="(e) => emit('toggle-theme', e)" />
+      <SwitchDark :theme="theme" @toggle="() => emit('toggle-theme')" />
     </div>
     <router-view v-slot="{ Component }">
       <Suspense>
