@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/boa-z/vohive/internal/db"
+	"github.com/boa-z/vohive/internal/device"
 	"github.com/boa-z/vowifi-go/runtimehost"
 	"github.com/boa-z/vowifi-go/runtimehost/messaging"
 	"github.com/boa-z/vowifi-go/runtimehost/voicehost"
@@ -17,6 +18,19 @@ import (
 
 func switchProfileIndexLabel(idx int) string {
 	return fmt.Sprintf("%d.", idx)
+}
+
+// deviceMenuItems 将设备列表转换为交互菜单项：按钮文字用 "名称 (ID)"，回调值为设备 ID
+func deviceMenuItems(workers []*device.Worker) []MenuItem {
+	items := make([]MenuItem, 0, len(workers))
+	for _, w := range workers {
+		label := w.ID
+		if w.Config.Name != "" {
+			label = fmt.Sprintf("%s (%s)", w.Config.Name, w.ID)
+		}
+		items = append(items, MenuItem{Label: label, Value: w.ID})
+	}
+	return items
 }
 
 func commandUsageBlock(title, usage, example string) string {
@@ -140,10 +154,19 @@ func formatVoWiFiDataplane(mode string) string {
 // handleCmdStatus 处理 /status 命令
 func (m *Manager) handleCmdStatus(cmdCtx CommandContext, args []string) string {
 	if len(args) == 0 {
-		if len(m.pool.GetAllWorkers()) == 0 {
+		workers := m.pool.GetAllWorkers()
+		switch len(workers) {
+		case 0:
 			return "设备状态 / 空\n结果    没有可用设备"
+		case 1:
+			args = []string{workers[0].ID}
+		default:
+			if picker, ok := cmdCtx.(MenuContext); ok {
+				_ = picker.ShowDevicePicker("请选择要查看状态的设备", "status", deviceMenuItems(workers))
+				return ""
+			}
+			return "设备状态 / 用法\n用法    /status [设备ID]\n提示    如需查看总览请使用 /list"
 		}
-		return "设备状态 / 用法\n用法    /status [设备ID]\n提示    如需查看总览请使用 /list"
 	}
 
 	deviceID := args[0]
@@ -261,9 +284,16 @@ func (m *Manager) handleCmdRotate(cmdCtx CommandContext, args []string) string {
 	workers := m.pool.GetAllWorkers()
 
 	if len(args) == 0 {
-		if len(workers) == 1 {
+		switch len(workers) {
+		case 0:
+			return commandUsageBlock("切换公网 IP", "/rotate [设备ID]", "/rotate ec20_1")
+		case 1:
 			deviceID = workers[0].ID
-		} else {
+		default:
+			if picker, ok := cmdCtx.(MenuContext); ok {
+				_ = picker.ShowDevicePicker("请选择要切换公网 IP 的设备", "rotate", deviceMenuItems(workers))
+				return ""
+			}
 			return commandUsageBlock("切换公网 IP", "/rotate [设备ID]", "/rotate ec20_1")
 		}
 	} else {
@@ -438,9 +468,16 @@ func (m *Manager) handleCmdEsim(cmdCtx CommandContext, args []string) string {
 	workers := m.pool.GetAllWorkers()
 
 	if len(args) == 0 {
-		if len(workers) == 1 {
+		switch len(workers) {
+		case 0:
+			return commandUsageBlock("查看 eSIM", "/esim [设备ID]", "/esim ec20_1")
+		case 1:
 			deviceID = workers[0].ID
-		} else {
+		default:
+			if picker, ok := cmdCtx.(MenuContext); ok {
+				_ = picker.ShowDevicePicker("请选择要查看 eSIM 的设备", "esim", deviceMenuItems(workers))
+				return ""
+			}
 			return commandUsageBlock("查看 eSIM", "/esim [设备ID]", "/esim ec20_1")
 		}
 	} else {
@@ -509,13 +546,28 @@ func (m *Manager) handleCmdEsim(cmdCtx CommandContext, args []string) string {
 
 // handleCmdSwitch 处理 /switch 命令，切换 eSIM profile
 // 命令格式: /switch <设备ID> <序号或ICCID>
+// 支持交互式两步：先选设备，再选该设备的 eSIM 配置。
 func (m *Manager) handleCmdSwitch(cmdCtx CommandContext, args []string) string {
-	if len(args) < 2 {
-		return commandUsageBlock("切换 eSIM", "/switch [设备ID] [序号或ICCID]", "/switch ec20_1 2")
-	}
+	var deviceID string
 
-	deviceID := args[0]
-	target := args[1]
+	// 第一步：未指定设备时弹出设备选择器
+	if len(args) == 0 {
+		workers := m.pool.GetAllWorkers()
+		switch len(workers) {
+		case 0:
+			return commandFailureBlock("切换 eSIM", "", "没有可用设备")
+		case 1:
+			deviceID = workers[0].ID
+		default:
+			if picker, ok := cmdCtx.(MenuContext); ok {
+				_ = picker.ShowDevicePicker("请选择要切换 eSIM 的设备", "switch", deviceMenuItems(workers))
+				return ""
+			}
+			return commandUsageBlock("切换 eSIM", "/switch [设备ID] [序号或ICCID]", "/switch ec20_1 2")
+		}
+	} else {
+		deviceID = args[0]
+	}
 
 	worker := m.pool.GetWorker(deviceID)
 	if worker == nil {
@@ -551,6 +603,36 @@ func (m *Manager) handleCmdSwitch(cmdCtx CommandContext, args []string) string {
 	if len(allProfiles) == 0 {
 		return commandFailureBlock("切换 eSIM", deviceID, "没有可用的 eSIM 配置")
 	}
+
+	// 第二步：已选设备但未指定目标时，弹出该设备的 eSIM 配置选择器
+	if len(args) < 2 {
+		if picker, ok := cmdCtx.(MenuContext); ok {
+			items := make([]MenuItem, 0, len(allProfiles))
+			for i, p := range allProfiles {
+				name := p.name
+				if name == "" {
+					name = "未命名"
+				}
+				iccidShort := p.iccid
+				if len(iccidShort) > 4 {
+					iccidShort = iccidShort[len(iccidShort)-4:]
+				}
+				items = append(items, MenuItem{
+					Label: fmt.Sprintf("%s（尾号 %s）", name, iccidShort),
+					Value: deviceID + ":" + strconv.Itoa(i+1),
+				})
+			}
+			displayName := deviceID
+			if worker.Config.Name != "" {
+				displayName = fmt.Sprintf("%s (%s)", worker.Config.Name, deviceID)
+			}
+			_ = picker.ShowDevicePicker(fmt.Sprintf("请选择 %s 要切换的 eSIM 配置", displayName), "switch", items)
+			return ""
+		}
+		return commandUsageBlock("切换 eSIM", "/switch [设备ID] [序号或ICCID]", "/switch ec20_1 2")
+	}
+
+	target := args[1]
 
 	// 解析目标：序号或 ICCID
 	var targetProfile flatProfile
@@ -597,7 +679,6 @@ func (m *Manager) handleCmdSwitch(cmdCtx CommandContext, args []string) string {
 			cmdCtx.Reply(fmt.Sprintf("❌ eSIM 切换失败 [%s]\nProfile: %s\nICCID: %s\n错误: %v",
 				deviceID, profileName, targetProfile.iccid, err))
 		} else {
-
 			cmdCtx.Reply(fmt.Sprintf("✅ eSIM 切换成功 [%s]\n新 Profile: %s\nICCID: %s\n",
 				deviceID, profileName, targetProfile.iccid))
 		}
