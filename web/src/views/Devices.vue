@@ -229,6 +229,12 @@ function nativeMccMnc(modem: ModemStatus | undefined): string {
   return mcc && mnc ? `${mcc}${mnc}` : ''
 }
 
+function servingMccMnc(modem: ModemStatus | undefined): string {
+  const mcc = String(modem?.serving_mcc ?? '').trim()
+  const mnc = String(modem?.serving_mnc ?? '').trim()
+  return mcc && mnc ? `${mcc}${mnc}` : ''
+}
+
 function pnnDisplayName(record: PNNRecord | undefined): string {
   return normalizeSPN(record?.full_name) || normalizeSPN(record?.short_name)
 }
@@ -388,6 +394,16 @@ const selectedSimOperatorDisplay = computed(() => {
   if (spn) return formatNamedOperator(spn, mccmnc)
   if (pnn) return formatNamedOperator(pnn, mccmnc)
   return mccmnc ? formatMccMncOperator(mccmnc) : '--'
+})
+
+const selectedRegisteredNetworkDisplay = computed(() => {
+  const d = selectedDevice.value
+  if (!d) return '--'
+  const operator = normalizeSPN(d?.modem?.operator)
+  const code = servingMccMnc(d?.modem)
+  if (operator) return formatNamedOperator(operator, code)
+  if (code) return formatMccMncOperator(code)
+  return '--'
 })
 
 function formatBytesPerSecond(bps: unknown) {
@@ -1320,6 +1336,7 @@ usePollingScheduler(async () => {
                 <DeviceOverviewTab
                   :device="selectedDevice"
                   :sim-operator-display="selectedSimOperatorDisplay"
+                  :registered-network-display="selectedRegisteredNetworkDisplay"
                   :traffic-speed-rx="trafficSpeedRx"
                   :traffic-speed-tx="trafficSpeedTx"
                   :traffic-minute-rx="rollingMinuteRx"

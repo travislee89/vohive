@@ -1125,6 +1125,9 @@ type DeviceStatus struct {
 	NativeSPN       string           `json:"native_spn,omitempty"`
 	NativeMCC       string           `json:"native_mcc,omitempty"`
 	NativeMNC       string           `json:"native_mnc,omitempty"`
+	SMSC            string           `json:"smsc,omitempty"`
+	ServingMCC      string           `json:"serving_mcc,omitempty"`
+	ServingMNC      string           `json:"serving_mnc,omitempty"`
 	GID1            string           `json:"gid1,omitempty"`
 	GID2            string           `json:"gid2,omitempty"`
 	PNN             []PNNRecord      `json:"pnn,omitempty"`

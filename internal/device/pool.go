@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -464,6 +465,12 @@ func (w *Worker) collectRuntimeStatus(ctx context.Context, reason string) modem.
 				status.PSAttached = ss.PSAttached
 				status.LAC = ss.LAC
 				status.CellID = ss.CellID
+				if ss.MCC > 0 {
+					status.ServingMCC = strconv.FormatUint(uint64(ss.MCC), 10)
+				}
+				if ss.MNC > 0 {
+					status.ServingMNC = strconv.FormatUint(uint64(ss.MNC), 10)
+				}
 				mu.Unlock()
 			}
 		})
@@ -479,6 +486,13 @@ func (w *Worker) collectRuntimeStatus(ctx context.Context, reason string) modem.
 				m := int(opMode)
 				mu.Lock()
 				status.OperatingMode = &m
+				mu.Unlock()
+			}
+		})
+		call(func() {
+			if v, err := w.getSMSCWithContext(ctx); err == nil && v != "" {
+				mu.Lock()
+				status.SMSC = v
 				mu.Unlock()
 			}
 		})
@@ -506,6 +520,9 @@ func (w *Worker) collectRuntimeStatus(ctx context.Context, reason string) modem.
 	}
 	status.ICCID = ""
 	status.IMSI = ""
+	if v, err := w.getSMSCWithContext(ctx); err == nil && v != "" {
+		status.SMSC = v
+	}
 	return status
 }
 

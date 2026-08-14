@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/boa-z/vohive/internal/config"
+	"github.com/boa-z/vohive/internal/modem"
 )
 
 // 零路径持久化后,持久化 config 不再含 control_device/interface 等路径;
@@ -36,5 +37,25 @@ func TestOverviewDisplayConfigNoPersistedReturnsRuntime(t *testing.T) {
 	got := overviewDisplayConfig(runtime, config.DeviceConfig{}, false)
 	if got.ControlDevice != "/dev/cdc-wdm1" || got.Interface != "wwan1" {
 		t.Fatalf("expected runtime config, got %+v", got)
+	}
+}
+
+func TestOverviewModemSummaryKeepsSMSCAndServingPLMN(t *testing.T) {
+	// 概览项会套用 modemSummaryStatus 精简敏感/冗余字段；短信中心号码与
+	// 当前驻留网络的 serving MCC/MNC 必须保留，否则概览 UI 读不到这三行数据。
+	status := modem.DeviceStatus{
+		SMSC:       "+6596197777",
+		ServingMCC: "525",
+		ServingMNC: "01",
+		GID1:       "01",
+		PNN:        nil,
+		OPL:        []modem.OPLRecord{{Record: 1}},
+	}
+	out := modemSummaryStatus(status)
+	if out.SMSC != "+6596197777" {
+		t.Fatalf("modemSummaryStatus().SMSC=%q want +6596197777", out.SMSC)
+	}
+	if out.ServingMCC != "525" || out.ServingMNC != "01" {
+		t.Fatalf("modemSummaryStatus().serving=%s/%s want 525/01", out.ServingMCC, out.ServingMNC)
 	}
 }
