@@ -284,6 +284,16 @@ func (s *Server) newRouter() *gin.Engine {
 		api.GET("/cards/:iccid/policy", s.handleGetCardPolicy)
 		api.PUT("/cards/:iccid/policy", s.handlePutCardPolicy)
 
+		// ===== 通知中心 (转发规则/转发日志) =====
+		api.GET("/notify/rules", s.handleListNotifyRules)                   // 列出转发规则
+		api.POST("/notify/rules", s.handleCreateNotifyRule)                 // 新建转发规则
+		api.PUT("/notify/rules/:id", s.handleUpdateNotifyRule)              // 更新转发规则
+		api.DELETE("/notify/rules/:id", s.handleDeleteNotifyRule)           // 删除转发规则
+		api.GET("/notify/logs", s.handleListNotifyLogs)                     // 分页查询转发日志
+		api.DELETE("/notify/logs", s.handleDeleteNotifyLogs)                // 高级清理（按条件手动删除）
+		api.GET("/notify/logs/retention", s.handleGetNotifyLogRetention)    // 获取自动清理设置
+		api.PUT("/notify/logs/retention", s.handleUpdateNotifyLogRetention) // 更新自动清理设置
+
 		api.GET("/devices/:device_id/operator_selection/scan", s.handleDeviceMgmtOperatorScan)              // 扫描运营商
 		api.GET("/devices/:device_id/operator_selection/scan/stream", s.handleDeviceMgmtOperatorScanStream) // SSE 扫描运营商
 		api.GET("/devices/:device_id/operator_selection", s.handleDeviceMgmtGetOperatorSelection)           // 获取当前选网配置

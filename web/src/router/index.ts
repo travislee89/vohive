@@ -41,6 +41,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/notify',
+      name: 'NotifyCenter',
+      component: () => import('../views/Notify.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/proxy',
       name: 'Proxy',
       component: () => import('../views/Proxy.vue'),

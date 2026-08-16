@@ -163,6 +163,9 @@ func Init(dbPath string) error {
 		&TrafficWeek{},
 		&TrafficMonth{},
 		&CardQuotaUsage{},
+		&NotifyRule{},
+		&NotifyLog{},
+		&NotifySettings{},
 	); err != nil {
 		return err
 	}
@@ -1039,6 +1042,26 @@ func GetSIMCardPhoneNumberByIMSI(imsi string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(sub.PhoneNumber), nil
+}
+
+// GetSIMOperatorByIMSI 获取 IMSI 对应的运营商名称（无则返回空字符串）。
+func GetSIMOperatorByIMSI(imsi string) (string, error) {
+	imsi = strings.TrimSpace(imsi)
+	if DB == nil || imsi == "" {
+		return "", nil
+	}
+	var sub SIMSubscription
+	err := DB.Select("operator").
+		Where("imsi = ? AND COALESCE(operator, '') <> ''", imsi).
+		Limit(1).
+		First(&sub).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(sub.Operator), nil
 }
 
 // GetPhoneNumberByIMSIOrICCID 先按 IMSI 查 sim_subscriptions，空则按 ICCID 查 staging。
