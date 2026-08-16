@@ -69,13 +69,13 @@ func TestWorkerRefreshRuntimeProjectsSMSCAndServingPLMN(t *testing.T) {
 		workerStatusBackendStub: workerStatusBackendStub{
 			mode: backend.BackendQMI,
 			serving: &backend.ServingSystem{
-				Operator: "Singtel",
-				MCC:      525,
-				MNC:      1,
+				Operator: "China Mobile",
+				MCC:      460,
+				MNC:      2,
 			},
 		},
 		seq: []smscResult{
-			{value: "+6596197777"},
+			{value: "+8613800100500"},
 		},
 	}
 	w := &Worker{
@@ -86,13 +86,13 @@ func TestWorkerRefreshRuntimeProjectsSMSCAndServingPLMN(t *testing.T) {
 		t.Fatalf("RefreshRuntime() error=%v", err)
 	}
 	st := w.ProjectDeviceStatus()
-	if st.SMSC != "+6596197777" {
-		t.Fatalf("ProjectDeviceStatus().SMSC=%q want=%q", st.SMSC, "+6596197777")
+	if st.SMSC != "+8613800100500" {
+		t.Fatalf("ProjectDeviceStatus().SMSC=%q want=%q", st.SMSC, "+8613800100500")
 	}
-	if st.ServingMCC != "525" || st.ServingMNC != "1" {
-		t.Fatalf("ProjectDeviceStatus().serving=%s/%s want 525/1", st.ServingMCC, st.ServingMNC)
+	if st.ServingMCC != "460" || st.ServingMNC != "2" {
+		t.Fatalf("ProjectDeviceStatus().serving=%s/%s want 460/2", st.ServingMCC, st.ServingMNC)
 	}
-	if st.Operator != "Singtel" {
-		t.Fatalf("ProjectDeviceStatus().Operator=%q want Singtel", st.Operator)
+	if st.Operator != "China Mobile" {
+		t.Fatalf("ProjectDeviceStatus().Operator=%q want China Mobile", st.Operator)
 	}
 }
