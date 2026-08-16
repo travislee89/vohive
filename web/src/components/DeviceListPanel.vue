@@ -131,7 +131,7 @@ const secondaryStatus = (d: DeviceMgmtListItem) => {
                 <div class="text-xs text-gray-500 mt-0.5 truncate">
                   {{ d.id }} · {{ d?.interface || '--' }}
                 </div>
-                <div class="text-xs text-gray-400 mt-1 truncate">
+                <div class="text-xs text-gray-400 mt-1 line-clamp-2" :title="secondaryStatus(d)">
                   {{ secondaryStatus(d) }}
                 </div>
               </div>
