@@ -58,6 +58,9 @@ type deviceRuntimeState struct {
 	SimInserted    bool   // SIM 卡是否在位/已插入
 	USBNetMode     int    // USB 网卡工作模式
 	OperatingMode  *int   // 当前功能运行模式 (如 CFUN 状态值)
+	SMSC           string // 短信中心号码
+	ServingMCC     string // 当前驻留网络移动国家代码
+	ServingMNC     string // 当前驻留网络移动网络代码
 	Ready          bool   // 标识运行时状态快照是否已初始化并就绪
 }
 
@@ -134,6 +137,9 @@ func (w *Worker) projectDeviceStatusLocked() modem.DeviceStatus {
 		NativeSPN:       strings.TrimSpace(w.state.Identity.NativeSPN),
 		NativeMCC:       strings.TrimSpace(w.state.Identity.NativeMCC),
 		NativeMNC:       strings.TrimSpace(w.state.Identity.NativeMNC),
+		SMSC:            strings.TrimSpace(w.state.Runtime.SMSC),
+		ServingMCC:      strings.TrimSpace(w.state.Runtime.ServingMCC),
+		ServingMNC:      strings.TrimSpace(w.state.Runtime.ServingMNC),
 		GID1:            strings.TrimSpace(w.state.Identity.GID1),
 		GID2:            strings.TrimSpace(w.state.Identity.GID2),
 		PNN:             backendPNNRecordsToModem(w.state.Identity.PNN),
@@ -410,6 +416,15 @@ func (w *Worker) mergeRuntimeStateLocked(status modem.DeviceStatus, healthy bool
 	}
 	w.state.Runtime.USBNetMode = status.USBNetMode
 	w.state.Runtime.OperatingMode = status.OperatingMode
+	if strings.TrimSpace(status.SMSC) != "" {
+		w.state.Runtime.SMSC = strings.TrimSpace(status.SMSC)
+	}
+	if strings.TrimSpace(status.ServingMCC) != "" {
+		w.state.Runtime.ServingMCC = strings.TrimSpace(status.ServingMCC)
+	}
+	if strings.TrimSpace(status.ServingMNC) != "" {
+		w.state.Runtime.ServingMNC = strings.TrimSpace(status.ServingMNC)
+	}
 	w.state.Runtime.Ready = true
 	now := time.Now()
 	w.state.Meta.Healthy = healthy

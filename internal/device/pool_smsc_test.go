@@ -61,3 +61,38 @@ func TestWorkerGetSMSCWithContextATUsesProvider(t *testing.T) {
 		t.Fatalf("getSMSCWithContext()=%q want=%q", got, "+8613800250500")
 	}
 }
+
+func TestWorkerRefreshRuntimeProjectsSMSCAndServingPLMN(t *testing.T) {
+	// 验证 collectRuntimeStatus + mergeRuntimeStateLocked + ProjectDeviceStatus
+	// 整条链路会把 SMSC 与当前驻留网络 MCC/MNC 透出到对外 modem.DeviceStatus。
+	b := &workerSMSCBackendStub{
+		workerStatusBackendStub: workerStatusBackendStub{
+			mode: backend.BackendQMI,
+			serving: &backend.ServingSystem{
+				Operator: "China Mobile",
+				MCC:      460,
+				MNC:      2,
+			},
+		},
+		seq: []smscResult{
+			{value: "+8613800100500"},
+		},
+	}
+	w := &Worker{
+		ID:      "dev-qmi",
+		Backend: b,
+	}
+	if err := w.RefreshRuntime(context.Background(), "test"); err != nil {
+		t.Fatalf("RefreshRuntime() error=%v", err)
+	}
+	st := w.ProjectDeviceStatus()
+	if st.SMSC != "+8613800100500" {
+		t.Fatalf("ProjectDeviceStatus().SMSC=%q want=%q", st.SMSC, "+8613800100500")
+	}
+	if st.ServingMCC != "460" || st.ServingMNC != "2" {
+		t.Fatalf("ProjectDeviceStatus().serving=%s/%s want 460/2", st.ServingMCC, st.ServingMNC)
+	}
+	if st.Operator != "China Mobile" {
+		t.Fatalf("ProjectDeviceStatus().Operator=%q want China Mobile", st.Operator)
+	}
+}

@@ -201,6 +201,9 @@ export type ModemStatus = {
   native_spn?: string
   native_mcc?: string
   native_mnc?: string
+  smsc?: string
+  serving_mcc?: string
+  serving_mnc?: string
   gid1?: string
   gid2?: string
   pnn?: PNNRecord[]
