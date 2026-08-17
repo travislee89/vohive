@@ -34,6 +34,8 @@ tags:
     description: VoWiFi 控制
   - name: logs
     description: 日志历史与实时流
+  - name: notify
+    description: 通知中心：转发规则与转发日志
 paths:
   /docs:
     get:
@@ -1624,6 +1626,221 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LogHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /notify/rules:
+    get:
+      tags: [notify]
+      summary: 列出转发规则
+      description: v1 仅支持 message_type=sms。
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+            example: sms
+      responses:
+        '200':
+          description: 规则列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotifyRule'
+                  enabled:
+                    type: integer
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [notify]
+      summary: 新建转发规则
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotifyRuleRequest'
+      responses:
+        '200':
+          description: 已创建的规则
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyRule'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /notify/rules/{id}:
+    put:
+      tags: [notify]
+      summary: 更新转发规则（部分字段更新）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotifyRuleRequest'
+      responses:
+        '200':
+          description: 已更新的规则
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyRule'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '404':
+          $ref: '#/components/responses/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [notify]
+      summary: 删除转发规则
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 删除成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /notify/logs:
+    get:
+      tags: [notify]
+      summary: 分页查询转发日志
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - in: query
+          name: type
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [success, unmatched, failed]
+        - in: query
+          name: start
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: end
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 转发日志分页结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotifyLog'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  page_size:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [notify]
+      summary: 高级清理（按条件手动删除转发日志）
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: before
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /notify/logs/retention:
+    get:
+      tags: [notify]
+      summary: 获取转发日志自动清理设置
+      responses:
+        '200':
+          description: 自动清理设置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyLogRetention'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      tags: [notify]
+      summary: 更新转发日志自动清理设置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotifyLogRetention'
+      responses:
+        '200':
+          description: 已更新的自动清理设置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyLogRetention'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -3250,3 +3467,110 @@ components:
             $ref: '#/components/schemas/LogEntry'
         error:
           type: string
+
+    NotifyRule:
+      type: object
+      properties:
+        id:
+          type: string
+        message_type:
+          type: string
+          example: sms
+        name:
+          type: string
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+          description: 数值越小越先匹配；首条命中即停止
+        match_field:
+          type: string
+          enum: [any, content, sender]
+        match_method:
+          type: string
+          enum: [all, contains, not_contains, equals, regex]
+        match_content:
+          type: string
+        target_channels:
+          type: array
+          items:
+            type: string
+            enum: [telegram, feishu, qq, webhook, bark, email, pushplus]
+        title_template:
+          type: string
+        body_mode:
+          type: string
+          enum: [plain, custom_json]
+        body_template:
+          type: string
+        is_default:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    NotifyRuleRequest:
+      type: object
+      properties:
+        message_type:
+          type: string
+          example: sms
+        name:
+          type: string
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+        match_field:
+          type: string
+        match_method:
+          type: string
+        match_content:
+          type: string
+        target_channels:
+          type: array
+          items:
+            type: string
+        title_template:
+          type: string
+        body_mode:
+          type: string
+        body_template:
+          type: string
+
+    NotifyLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        message_type:
+          type: string
+        status:
+          type: string
+          enum: [success, unmatched, failed]
+        content_summary:
+          type: string
+        matched_rule_id:
+          type: string
+        matched_rule_name:
+          type: string
+        channel:
+          type: string
+        error_detail:
+          type: string
+        device_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    NotifyLogRetention:
+      type: object
+      properties:
+        auto_cleanup_enabled:
+          type: boolean
+        retention_days:
+          type: integer

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/boa-z/vohive/internal/config"
+	"github.com/boa-z/vohive/internal/db"
 	"github.com/boa-z/vohive/internal/device"
 	"github.com/boa-z/vohive/pkg/logger"
 )
@@ -23,6 +24,16 @@ type NotificationContext struct {
 	DeviceID   string
 	DeviceName string
 	Timestamp  time.Time
+	SMS        *SMSContext // 仅 sms_received 事件非空，供转发规则匹配/模板渲染使用
+}
+
+// SMSContext 携带短信通知的结构化字段，供转发规则做条件匹配与模板变量渲染。
+type SMSContext struct {
+	Sender     string // 发送方号码
+	Content    string // 短信内容
+	Source     string // 蜂窝 | VoWiFi
+	LocalPhone string // 本机号码（best-effort 解析，可能为空）
+	Operator   string // 运营商（best-effort 解析，可能为空）
 }
 
 func (c NotificationContext) DeviceLabel() string {
@@ -55,7 +66,40 @@ func NewManager(cfg *config.Config, pool *device.Pool) (*Manager, error) {
 		return nil, err
 	}
 
+	// 首次启动时为 SMS 播种一条默认转发规则（全部匹配，转发到当前所有已启用渠道），
+	// 确保升级后不会因规则表为空而静默丢失原本无条件转发的行为。幂等：仅播种一次。
+	if err := db.SeedDefaultSMSRuleIfEmpty(enabledChannelKeys(cfg)); err != nil {
+		logger.Warn("播种默认短信转发规则失败", "err", err)
+	}
+
 	return m, nil
+}
+
+// enabledChannelKeys 返回配置中当前已启用渠道的 key 列表（与各 Channel.Name() 返回值一致）。
+func enabledChannelKeys(cfg *config.Config) []string {
+	var keys []string
+	if cfg.Telegram.Enabled {
+		keys = append(keys, "telegram")
+	}
+	if cfg.Feishu.Enabled {
+		keys = append(keys, "feishu")
+	}
+	if cfg.QQ.Enabled {
+		keys = append(keys, "qq")
+	}
+	if cfg.Webhook.Enabled {
+		keys = append(keys, "webhook")
+	}
+	if cfg.Bark.Enabled {
+		keys = append(keys, "bark")
+	}
+	if cfg.Email.Enabled {
+		keys = append(keys, "email")
+	}
+	if cfg.Pushplus.Enabled {
+		keys = append(keys, "pushplus")
+	}
+	return keys
 }
 
 // initChannels 根据配置创建并启动所有通知渠道
@@ -238,13 +282,43 @@ func (m *Manager) NotifySMSWithSource(deviceID, sender, content, source string, 
 		"source", source,
 		"channel_count", len(m.channels))
 
+	localPhone, operator := m.resolveSMSMeta(deviceID)
+
 	m.broadcastWithContext(NotificationContext{
 		Event:      "sms_received",
 		Text:       msg,
 		DeviceID:   deviceID,
 		DeviceName: m.resolveDeviceName(deviceID),
 		Timestamp:  timestamp,
+		SMS: &SMSContext{
+			Sender:     sender,
+			Content:    content,
+			Source:     source,
+			LocalPhone: localPhone,
+			Operator:   operator,
+		},
 	})
+}
+
+// resolveSMSMeta best-effort 解析设备当前 ICCID/IMSI 对应的本机号码与运营商，
+// 供转发规则模板变量使用；任何一步失败都静默返回空字符串，不影响通知发送。
+func (m *Manager) resolveSMSMeta(deviceID string) (localPhone, operator string) {
+	if m.pool == nil || strings.TrimSpace(deviceID) == "" {
+		return "", ""
+	}
+	worker := m.pool.GetWorker(deviceID)
+	if worker == nil {
+		return "", ""
+	}
+	imsi := worker.GetIMSI()
+	iccid := worker.CurrentICCID()
+	if phone, err := db.GetPhoneNumberByIMSIOrICCID(imsi, iccid); err == nil {
+		localPhone = phone
+	}
+	if op, err := db.GetSIMOperatorByIMSI(imsi); err == nil {
+		operator = op
+	}
+	return localPhone, operator
 }
 
 // NotifyRaw 发送原始文本通知到所有渠道
@@ -317,6 +391,13 @@ func (m *Manager) broadcastWithContext(ctx NotificationContext) {
 		ctx.Event = "notification"
 	}
 
+	// SMS 事件走转发规则引擎（按规则匹配后有选择地转发到目标渠道并记录日志）；
+	// 其余事件类型（ip_rotated/incoming_call/raw 等）v1 未建规则，保持原有「广播到所有已启用渠道」行为。
+	if ctx.SMS != nil {
+		m.broadcastSMSWithRules(ctx)
+		return
+	}
+
 	for _, ch := range m.channels {
 		ch := ch // capture variable
 		go func() {
@@ -328,6 +409,103 @@ func (m *Manager) broadcastWithContext(ctx NotificationContext) {
 			}
 			if err := ch.Send(ctx.Text); err != nil {
 				logger.Warn("通知渠道发送失败", "channel", ch.Name(), "event", ctx.Event, "err", err)
+			}
+		}()
+	}
+}
+
+// channelsByName 按 Channel.Name() 建立当前已启用渠道的索引，供规则按渠道 key 定向发送。
+func (m *Manager) channelsByName() map[string]Channel {
+	out := make(map[string]Channel, len(m.channels))
+	for _, ch := range m.channels {
+		out[ch.Name()] = ch
+	}
+	return out
+}
+
+// broadcastSMSWithRules 用转发规则引擎处理 SMS 通知：匹配到规则则渲染模板并按规则指定的渠道发送，
+// 每次渠道发送尝试都写一条转发日志；未匹配到任何规则则不转发，写一条 status=unmatched 的日志。
+func (m *Manager) broadcastSMSWithRules(ctx NotificationContext) {
+	rule, err := evaluateSMSRules(ctx)
+	if err != nil {
+		logger.Warn("转发规则匹配失败", "event", ctx.Event, "err", err)
+	}
+	if rule == nil {
+		if err := db.CreateNotifyLog(db.NotifyLog{
+			MessageType:    "sms",
+			Status:         db.NotifyLogStatusUnmatched,
+			ContentSummary: db.SummarizeNotifyLogContent(ctx.Text),
+			DeviceID:       ctx.DeviceID,
+			Timestamp:      ctx.Timestamp,
+		}); err != nil {
+			logger.Warn("写入转发日志失败", "err", err)
+		}
+		return
+	}
+
+	values := buildSMSTemplateValues(ctx)
+	title := RenderPlaceholders(rule.TitleTemplate, values)
+	body := ctx.Text
+	if strings.TrimSpace(rule.BodyTemplate) != "" {
+		body = RenderPlaceholders(rule.BodyTemplate, values)
+	}
+	renderedText := body
+	if strings.TrimSpace(title) != "" {
+		renderedText = title + "\n" + body
+	}
+
+	// sendCtx 保留原始事件的设备/时间等元数据，仅替换文本为规则渲染结果——
+	// 这样 Webhook/Bark/Email/Pushplus 等实现了 SendWithContext 的渠道仍能拿到完整上下文
+	// （包括它们自己独立配置的模板，如 Webhook 的 text_template，会在此基础上再包一层信封，而不是丢失元数据）。
+	sendCtx := ctx
+	sendCtx.Text = renderedText
+
+	byName := m.channelsByName()
+	ruleID := rule.ID
+	ruleName := rule.Name
+	for _, target := range rule.Channels() {
+		ch, ok := byName[target]
+		if !ok {
+			continue // 规则目标渠道当前未启用/不存在，静默跳过
+		}
+		go func() {
+			var sendErr error
+			switch {
+			case rule.BodyMode == SendBodyModeCustomJSON && target == "webhook":
+				if wh, ok := ch.(*WebhookChannel); ok {
+					sendErr = wh.SendRaw(body)
+				} else if withCtx, ok := ch.(contextualChannel); ok {
+					sendErr = withCtx.SendWithContext(sendCtx)
+				} else {
+					sendErr = ch.Send(renderedText)
+				}
+			default:
+				if withCtx, ok := ch.(contextualChannel); ok {
+					sendErr = withCtx.SendWithContext(sendCtx)
+				} else {
+					sendErr = ch.Send(renderedText)
+				}
+			}
+
+			status := db.NotifyLogStatusSuccess
+			errDetail := ""
+			if sendErr != nil {
+				status = db.NotifyLogStatusFailed
+				errDetail = sendErr.Error()
+				logger.Warn("转发规则渠道发送失败", "channel", target, "rule", ruleName, "err", sendErr)
+			}
+			if err := db.CreateNotifyLog(db.NotifyLog{
+				MessageType:     "sms",
+				Status:          status,
+				ContentSummary:  db.SummarizeNotifyLogContent(renderedText),
+				MatchedRuleID:   &ruleID,
+				MatchedRuleName: ruleName,
+				Channel:         target,
+				ErrorDetail:     errDetail,
+				DeviceID:        ctx.DeviceID,
+				Timestamp:       ctx.Timestamp,
+			}); err != nil {
+				logger.Warn("写入转发日志失败", "err", err)
 			}
 		}()
 	}

@@ -11,8 +11,37 @@ import (
 	"time"
 
 	"github.com/boa-z/vohive/internal/config"
+	"github.com/boa-z/vohive/internal/db"
 	"github.com/boa-z/vohive/pkg/logger"
 )
+
+// initNotifyRuleTestDB 为需要经过转发规则引擎的用例准备一个临时 sqlite DB。
+func initNotifyRuleTestDB(t *testing.T) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "notify_rules.db")
+	if err := db.Init(dbPath); err != nil {
+		t.Fatalf("db.Init() error=%v", err)
+	}
+	t.Cleanup(func() { db.DB = nil })
+}
+
+// seedCatchAllSMSRule 插入一条「全部匹配」的 sms 规则，转发到指定渠道 key，
+// 模拟生产环境中 NewManager 启动时自动播种的默认规则。
+func seedCatchAllSMSRule(t *testing.T, channelKey string) {
+	t.Helper()
+	rule := db.NotifyRule{
+		MessageType: "sms",
+		Name:        "test-catch-all",
+		Enabled:     true,
+		MatchField:  "any",
+		MatchMethod: "all",
+		BodyMode:    "plain",
+	}
+	rule.SetChannels([]string{channelKey})
+	if _, err := db.UpsertNotifyRule(rule); err != nil {
+		t.Fatalf("UpsertNotifyRule() error=%v", err)
+	}
+}
 
 type captureChannel struct {
 	mu    sync.Mutex
@@ -99,6 +128,9 @@ func waitUntil(t *testing.T, timeout time.Duration, cond func() bool) {
 }
 
 func TestManagerNotifyEventsToWebhookWithTemplate(t *testing.T) {
+	initNotifyRuleTestDB(t)
+	seedCatchAllSMSRule(t, "webhook")
+
 	var mu sync.Mutex
 	var payloads []webhookPayload
 
@@ -208,6 +240,9 @@ func TestManagerNotifySMSLogsBroadcastSummary(t *testing.T) {
 }
 
 func TestManagerNotifySMSWithSourceUsesProvidedSourceLabel(t *testing.T) {
+	initNotifyRuleTestDB(t)
+	seedCatchAllSMSRule(t, "capture")
+
 	capture := &captureChannel{}
 	m := &Manager{channels: []Channel{capture}}
 	notifier, ok := any(m).(interface {

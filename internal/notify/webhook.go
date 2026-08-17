@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -56,8 +55,6 @@ var protectedWebhookHeaders = map[string]struct{}{
 type SendWithContextResult struct {
 	FailedURLs []string
 }
-
-var webhookPlaceholderPattern = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_]+)\s*\}\}`)
 
 // NewWebhookChannel 根据配置创建 Webhook 渠道
 func NewWebhookChannel(cfg config.WebhookConfig) (*WebhookChannel, error) {
@@ -198,18 +195,35 @@ func (w *WebhookChannel) renderText(ctx NotificationContext) (rendered string, e
 		"device_name":  strings.TrimSpace(ctx.DeviceName),
 		"device_label": ctx.DeviceLabel(),
 	}
-	rendered = webhookPlaceholderPattern.ReplaceAllStringFunc(w.textTemplate, func(token string) string {
-		matches := webhookPlaceholderPattern.FindStringSubmatch(token)
-		if len(matches) != 2 {
-			return token
-		}
-		key := matches[1]
-		if v, ok := values[key]; ok {
-			return v
-		}
-		return token
-	})
-	return rendered, nil
+	return RenderPlaceholders(w.textTemplate, values), nil
+}
+
+// SendRaw 将 body 作为已渲染好的 JSON 原样 POST 到所有目标 URL，跳过 webhookPayload 的封装/模板渲染。
+// 供转发规则的「自定义请求体」模式（body_mode=custom_json）使用。
+func (w *WebhookChannel) SendRaw(body string) error {
+	if w == nil || w.client == nil || len(w.urls) == 0 {
+		return nil
+	}
+	raw := []byte(body)
+	signature := w.computeSignature(raw)
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var lastErr error
+	for _, u := range w.urls {
+		wg.Add(1)
+		go func(targetURL string) {
+			defer wg.Done()
+			if err := w.postWithRetry(targetURL, raw, signature); err != nil {
+				mu.Lock()
+				lastErr = fmt.Errorf("%s: %w", targetURL, err)
+				mu.Unlock()
+				logger.Warn("Webhook 自定义请求体推送失败", "url", targetURL, "err", err)
+			}
+		}(u)
+	}
+	wg.Wait()
+	return lastErr
 }
 
 // RegisterCommand 空实现 — Webhook 渠道不支持接收命令

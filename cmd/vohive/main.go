@@ -161,6 +161,16 @@ func main() {
 			"countries", countryResult.Countries)
 	}
 	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := db.RunNotifyLogRetentionOnce(); err != nil {
+				logger.Warn("转发日志自动清理失败", "err", err)
+			}
+		}
+	}()
+
+	go func() {
 		need, err := db.NeedBackfillSMSContacts()
 		if err != nil {
 			logger.Error("短信联系人回填检查失败", "err", err)
