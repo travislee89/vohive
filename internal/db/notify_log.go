@@ -17,6 +17,7 @@ type NotifyLog struct {
 	Channel         string    `gorm:"column:channel;index" json:"channel,omitempty"`
 	ErrorDetail     string    `gorm:"column:error_detail" json:"error_detail,omitempty"`
 	DeviceID        string    `gorm:"column:device_id;index" json:"device_id,omitempty"`
+	SMSID           *uint     `gorm:"column:sms_id;index" json:"sms_id,omitempty"` // 关联的 sms.id；无法关联时为 nil
 	Timestamp       time.Time `gorm:"column:timestamp;index:idx_notify_log_ts,sort:desc" json:"timestamp"`
 }
 

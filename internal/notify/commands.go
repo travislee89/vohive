@@ -103,7 +103,7 @@ func (m *Manager) handleCmdSendSMS(cmdCtx CommandContext, args []string) string 
 				cmdCtx.Reply(fmt.Sprintf("发送短信 / 失败\n设备    %s\n号码    %s\n通道    蜂窝\n原因    %v", displayName, phone, sendErr))
 				return
 			}
-			_ = db.SaveSMS(worker.GetIMSI(), worker.ID, phone, message, 2, 2, time.Now())
+			_, _ = db.SaveSMS(worker.GetIMSI(), worker.ID, phone, message, 2, 2, time.Now())
 		}
 
 		channel := "蜂窝"

@@ -19,6 +19,7 @@ type vowifiSMSRecordResult struct {
 	Stored     bool
 	Duplicate  bool
 	Suppressed bool
+	SMSID      uint
 }
 
 func RecordVoWiFiSMSSendFailure(p *Pool, deviceID, target, content string, at time.Time) error {
@@ -85,11 +86,15 @@ func (r vowifiSMSHistoryRecorder) RecordReceived(e eventhost.SMSReceived) (vowif
 		return vowifiSMSRecordResult{Duplicate: true}, nil
 	}
 
-	err = db.SaveSMSWithLocalPhone(imsi, localPhone, strings.TrimSpace(e.Sender), localPhone, e.Content, 1, 0, ts)
+	saved, err := db.SaveSMSWithLocalPhone(imsi, localPhone, strings.TrimSpace(e.Sender), localPhone, e.Content, 1, 0, ts)
 	if err != nil {
 		return vowifiSMSRecordResult{}, err
 	}
-	return vowifiSMSRecordResult{Stored: true}, nil
+	result := vowifiSMSRecordResult{Stored: true}
+	if saved != nil {
+		result.SMSID = saved.ID
+	}
+	return result, nil
 }
 
 func (r vowifiSMSHistoryRecorder) RecordSent(e eventhost.SMSSent) error {
@@ -98,7 +103,8 @@ func (r vowifiSMSHistoryRecorder) RecordSent(e eventhost.SMSSent) error {
 		return nil
 	}
 	localPhone := r.localPhone(imsi)
-	return db.SaveSMSWithLocalPhone(imsi, localPhone, localPhone, strings.TrimSpace(e.TargetURI), e.Content, 2, 2, r.eventTime(e.Time))
+	_, err := db.SaveSMSWithLocalPhone(imsi, localPhone, localPhone, strings.TrimSpace(e.TargetURI), e.Content, 2, 2, r.eventTime(e.Time))
+	return err
 }
 
 func (r vowifiSMSHistoryRecorder) RecordSendFailure(devID, target, content string, at time.Time) error {
@@ -107,7 +113,8 @@ func (r vowifiSMSHistoryRecorder) RecordSendFailure(devID, target, content strin
 		return nil
 	}
 	localPhone := r.localPhone(imsi)
-	return db.SaveSMSWithLocalPhone(imsi, localPhone, localPhone, strings.TrimSpace(target), content, 2, 3, r.eventTime(at))
+	_, err := db.SaveSMSWithLocalPhone(imsi, localPhone, localPhone, strings.TrimSpace(target), content, 2, 3, r.eventTime(at))
+	return err
 }
 
 func (r vowifiSMSHistoryRecorder) RecordLocalNumberLearned(e eventhost.LocalNumberLearned) error {

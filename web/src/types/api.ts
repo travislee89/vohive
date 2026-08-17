@@ -337,6 +337,10 @@ export type SMSMessage = {
   content: string
   type: number
   status?: number // 0=未读, 1=已读, 2=发送成功, 3=发送失败
+  forward_status?: number // 0=未转发, 1=转发成功, 2=转发失败, 3=部分成功
+  forwarded_at?: string
+  forward_rule_name?: string
+  forward_channels?: string[]
   timestamp: string
   device_name?: string
 }

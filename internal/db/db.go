@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -80,18 +81,59 @@ func (PendingPhoneNumber) TableName() string { return "pending_phone_numbers" }
 
 // SMS 短信表 (关联 IMSI)
 type SMS struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	IMSI       string    `gorm:"column:imsi;index:idx_sms_imsi_peer_ts,priority:1;index:idx_sms_imsi_ts,priority:1" json:"imsi"`
-	ICCID      string    `gorm:"column:iccid;index" json:"iccid"`
-	Peer       string    `gorm:"column:peer;index:idx_sms_imsi_peer_ts,priority:2" json:"peer"`
-	LocalPhone string    `gorm:"column:local_phone;index" json:"local_phone"`
-	Sender     string    `json:"sender"`
-	Recipient  string    `json:"recipient"`
-	Content    string    `json:"content"`
-	Type       int       `json:"type"`   // 1: 接收, 2: 发送
-	Status     int       `json:"status"` // 0: 未读, 1: 已读, 2: 发送成功, 3: 发送失败
-	Timestamp  time.Time `gorm:"index:idx_sms_imsi_peer_ts,priority:3,sort:desc;index:idx_sms_ts,sort:desc;index:idx_sms_imsi_ts,priority:2,sort:desc" json:"timestamp"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID              uint       `gorm:"primaryKey" json:"id"`
+	IMSI            string     `gorm:"column:imsi;index:idx_sms_imsi_peer_ts,priority:1;index:idx_sms_imsi_ts,priority:1" json:"imsi"`
+	ICCID           string     `gorm:"column:iccid;index" json:"iccid"`
+	Peer            string     `gorm:"column:peer;index:idx_sms_imsi_peer_ts,priority:2" json:"peer"`
+	LocalPhone      string     `gorm:"column:local_phone;index" json:"local_phone"`
+	Sender          string     `json:"sender"`
+	Recipient       string     `json:"recipient"`
+	Content         string     `json:"content"`
+	Type            int        `json:"type"`   // 1: 接收, 2: 发送
+	Status          int        `json:"status"` // 0: 未读, 1: 已读, 2: 发送成功, 3: 发送失败
+	ForwardStatus   int        `gorm:"column:forward_status" json:"forward_status"`                 // 0: 未转发, 1: 转发成功, 2: 转发失败, 3: 部分成功
+	ForwardedAt     *time.Time `gorm:"column:forwarded_at" json:"forwarded_at,omitempty"`
+	ForwardChannels string     `gorm:"column:forward_channels" json:"-"`                             // JSON 编码的已尝试渠道 key 数组
+	ForwardRuleName string     `gorm:"column:forward_rule_name" json:"forward_rule_name,omitempty"` // 命中的转发规则名
+	Timestamp       time.Time  `gorm:"index:idx_sms_imsi_peer_ts,priority:3,sort:desc;index:idx_sms_ts,sort:desc;index:idx_sms_imsi_ts,priority:2,sort:desc" json:"timestamp"`
+	CreatedAt       time.Time  `json:"created_at"`
+}
+
+// SMS.ForwardStatus 取值
+const (
+	SMSForwardStatusNone    = 0 // 未转发（未命中规则，或命中规则但目标渠道均不可用）
+	SMSForwardStatusSuccess = 1
+	SMSForwardStatusFailed  = 2
+	SMSForwardStatusPartial = 3
+)
+
+// ForwardChannelList 解码 ForwardChannels 为渠道 key 列表。
+func (s *SMS) ForwardChannelList() []string {
+	if s == nil || strings.TrimSpace(s.ForwardChannels) == "" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(s.ForwardChannels), &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+// SetForwardChannelList 编码渠道 key 列表到 ForwardChannels。
+func (s *SMS) SetForwardChannelList(channels []string) {
+	if s == nil {
+		return
+	}
+	if len(channels) == 0 {
+		s.ForwardChannels = "[]"
+		return
+	}
+	b, err := json.Marshal(channels)
+	if err != nil {
+		s.ForwardChannels = "[]"
+		return
+	}
+	s.ForwardChannels = string(b)
 }
 
 type SMSContact struct {
@@ -674,10 +716,10 @@ func UpdateDeviceSignal(imei string, signalDBM int) error {
 	}).Error
 }
 
-// SaveSMS 保存短信记录
+// SaveSMS 保存短信记录，返回新建的记录（含 ID，供转发状态回写关联）
 // 注意：时间戳会被截断到秒精度，确保发送（time.Now() 有纳秒）和接收（SCTS 仅有秒）
 // 的消息在同一秒内能通过 id 正确排序
-func SaveSMS(imsi, sender, recipient, content string, smsType, status int, timestamp time.Time) error {
+func SaveSMS(imsi, sender, recipient, content string, smsType, status int, timestamp time.Time) (*SMS, error) {
 	return SaveSMSWithLocalPhone(imsi, "", sender, recipient, content, smsType, status, timestamp)
 }
 
@@ -711,11 +753,11 @@ func HasDuplicateReceivedSMS(imsi, localPhone, sender, recipient, content string
 	return count > 0, nil
 }
 
-// SaveSMSWithLocalPhone 保存短信记录并显式写入本机号码。
+// SaveSMSWithLocalPhone 保存短信记录并显式写入本机号码，返回新建的记录（含 ID，供转发状态回写关联）。
 // localPhone 为空时会按方向自动推导，并在必要时回退到订阅手机号。
-func SaveSMSWithLocalPhone(imsi, localPhone, sender, recipient, content string, smsType, status int, timestamp time.Time) error {
+func SaveSMSWithLocalPhone(imsi, localPhone, sender, recipient, content string, smsType, status int, timestamp time.Time) (*SMS, error) {
 	if DB == nil {
-		return nil
+		return nil, nil
 	}
 	imsi = strings.TrimSpace(imsi)
 	sender = strings.TrimSpace(sender)
@@ -737,7 +779,7 @@ func SaveSMSWithLocalPhone(imsi, localPhone, sender, recipient, content string, 
 		Status:     status,
 		Timestamp:  timestamp.Truncate(time.Second),
 	}
-	return DB.Transaction(func(tx *gorm.DB) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&sms).Error; err != nil {
 			return err
 		}
@@ -746,6 +788,26 @@ func SaveSMSWithLocalPhone(imsi, localPhone, sender, recipient, content string, 
 		}
 		return upsertSMSContactFromSMS(tx, &sms)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return &sms, nil
+}
+
+// UpdateSMSForwardStatus 转发流程结束后回写汇总结果到对应 sms 行。
+func UpdateSMSForwardStatus(id uint, status int, channels []string, ruleName string) error {
+	if DB == nil || id == 0 {
+		return nil
+	}
+	row := SMS{}
+	row.SetForwardChannelList(channels)
+	now := time.Now()
+	return DB.Model(&SMS{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"forward_status":    status,
+		"forwarded_at":      now,
+		"forward_channels":  row.ForwardChannels,
+		"forward_rule_name": ruleName,
+	}).Error
 }
 
 func normalizeSMSPeer(smsType int, sender, recipient string) string {

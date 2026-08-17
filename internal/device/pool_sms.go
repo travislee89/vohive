@@ -437,13 +437,21 @@ func (w *Worker) processSMS(sender, content string, timestamp time.Time) {
 			imsi = w.Modem.GetIMSI()
 		}
 	}
+	var smsID uint
 	if imsi != "" {
-		if err := db.SaveSMS(imsi, sender, "", content, 1, 0, timestamp); err != nil {
+		saved, err := db.SaveSMS(imsi, sender, "", content, 1, 0, timestamp)
+		if err != nil {
 			logger.Warn(fmt.Sprintf("[%s] 保存短信到数据库失败", w.ID), "err", err)
+		} else if saved != nil {
+			smsID = saved.ID
 		}
 	}
 
 	if notifier := w.Pool.getNotifier(); notifier != nil {
-		notifier.NotifySMS(w.ID, sender, content, timestamp)
+		if withID, ok := notifier.(SMSIDNotifier); ok && smsID != 0 {
+			withID.NotifySMSWithID(smsID, w.ID, sender, content, "蜂窝", timestamp)
+		} else {
+			notifier.NotifySMS(w.ID, sender, content, timestamp)
+		}
 	}
 }

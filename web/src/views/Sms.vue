@@ -13,6 +13,7 @@ import ErrorState from '../components/ErrorState.vue'
 import ListSkeleton from '../components/ListSkeleton.vue'
 import RefreshButton from '../components/RefreshButton.vue'
 import type { DeviceMgmtListItem, SMSMessage } from '../types/api'
+import type { NotifyLog } from '../types/notify'
 import { Delete24Regular, Mail24Regular, Send24Regular } from '@vicons/fluent'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
@@ -139,6 +140,8 @@ const showDetailPane = computed(() => !isNarrowLayout.value || !!selectedThreadK
 const showSendModal = ref(false)
 const sending = ref(false)
 const deletingMessageId = ref<number | null>(null)
+const forwardLogCache = ref<Record<number, NotifyLog[]>>({})
+const forwardLogLoading = ref<Record<number, boolean>>({})
 const deletingThreadKey = ref<string | null>(null)
 const supportsHover = ref(false)
 const showActionSheet = ref(false)
@@ -680,6 +683,50 @@ async function confirmDeleteMessage(message: SMSMessage) {
   }
 }
 
+function forwardStatusIcon(status?: number) {
+  switch (status) {
+    case 1: return '✓'
+    case 2: return '✗'
+    case 3: return '±'
+    default: return ''
+  }
+}
+
+function forwardStatusClass(status?: number) {
+  switch (status) {
+    case 1: return 'text-green-500'
+    case 2: return 'text-red-500'
+    case 3: return 'text-amber-500'
+    default: return ''
+  }
+}
+
+function forwardStatusLabel(status?: number) {
+  switch (status) {
+    case 1: return '转发成功'
+    case 2: return '转发失败'
+    case 3: return '部分成功'
+    default: return '未转发'
+  }
+}
+
+function notifyLogStatusLabel(status: string) {
+  if (status === 'success') return '成功'
+  if (status === 'unmatched') return '未匹配规则'
+  return '失败'
+}
+
+async function loadForwardLog(messageId: number) {
+  if (forwardLogCache.value[messageId] || forwardLogLoading.value[messageId]) return
+  forwardLogLoading.value[messageId] = true
+  try {
+    const result = await smsStore.getForwardLog(messageId)
+    if (result.ok) forwardLogCache.value[messageId] = result.data
+  } finally {
+    forwardLogLoading.value[messageId] = false
+  }
+}
+
 async function confirmDeleteThread(thread: SmsThread) {
   if (deletingThreadKey.value === thread.key) return
   try {
@@ -930,6 +977,42 @@ async function confirmDeleteThread(thread: SmsThread) {
                       <span class="text-[11px] text-gray-400 font-mono">{{ formatISODateTime(m.timestamp) }}</span>
                       <span v-if="m.type === 2 && m.status === 2" class="text-green-500 text-xs" title="发送成功">✓</span>
                       <span v-else-if="m.type === 2 && m.status === 3" class="text-red-500 text-xs" title="发送失败">✗</span>
+                      <el-popover
+                        v-if="m.type === 1 && m.forward_status"
+                        trigger="click"
+                        :width="300"
+                        @show="void loadForwardLog(m.id)"
+                      >
+                        <template #reference>
+                          <span
+                            class="text-xs font-bold cursor-pointer"
+                            :class="forwardStatusClass(m.forward_status)"
+                            :title="forwardStatusLabel(m.forward_status)"
+                          >{{ forwardStatusIcon(m.forward_status) }}</span>
+                        </template>
+                        <div class="text-xs space-y-2">
+                          <div class="font-bold text-gray-600 dark:text-gray-300">
+                            {{ forwardStatusLabel(m.forward_status) }}
+                            <span v-if="m.forward_rule_name" class="font-normal text-gray-400"> · {{ m.forward_rule_name }}</span>
+                          </div>
+                          <div v-if="forwardLogLoading[m.id]" class="text-gray-400">加载中…</div>
+                          <div v-else-if="!forwardLogCache[m.id]?.length" class="text-gray-400">暂无转发记录</div>
+                          <div v-else class="space-y-1.5 max-h-60 overflow-y-auto">
+                            <div
+                              v-for="log in forwardLogCache[m.id]"
+                              :key="log.id"
+                              class="border-b border-gray-100 dark:border-white/10 pb-1.5 last:border-0 last:pb-0"
+                            >
+                              <div class="flex items-center justify-between">
+                                <span class="font-bold">{{ log.channel || '—' }}</span>
+                                <span :class="log.status === 'success' ? 'text-green-500' : 'text-red-500'">{{ notifyLogStatusLabel(log.status) }}</span>
+                              </div>
+                              <div class="text-gray-400 font-mono">{{ formatISODateTime(log.timestamp) }}</div>
+                              <div v-if="log.error_detail" class="text-red-400 break-all">{{ log.error_detail }}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </el-popover>
                       <el-button
                         v-if="!isNarrowLayout && (m.type !== 2 || !m.device_name)"
                         text
