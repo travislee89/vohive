@@ -38,6 +38,7 @@ func TestAddWorkerQMIManagedRebindsByIMEIWhenControlDeviceGone(t *testing.T) {
 
 	// 初始化 Pool
 	p := NewPool(&config.Config{})
+	defer p.cancel()
 
 	devCfg := config.DeviceConfig{
 		ID:             "dev-qmi-1",
@@ -53,14 +54,24 @@ func TestAddWorkerQMIManagedRebindsByIMEIWhenControlDeviceGone(t *testing.T) {
 	// 但 shouldDiscoverQMIManagedBootstrapByIMEI 会返回 true，它会用 discovery
 	// 取回 /dev/cdc-wdm-new-qmi 并采纳新的 QMI attachment。
 	//
-	// 测试环境中没有真实 QMI 硬件/qmi-proxy，所以后续真正打开 QMI 设备必然失败，
-	// AddWorkerFromConfig 最终仍会返回 error（此时不返回 *Worker，无法直接断言
-	// 已应用的字段）。这里只验证 rebind 逻辑本身生效了：错误不是"静态控制口不存在"
-	// 的早退错误（即没有在读取旧的 /dev/nonexistent-control-old 时就直接放弃），
-	// 说明流程确实基于 IMEI 匹配换成了新发现的设备后才失败。
-	_, err := p.AddWorkerFromConfig(devCfg)
-	require.Error(t, err)
-	require.NotContains(t, err.Error(), "设备控制口 /dev/nonexistent-control-old 不存在，可能模块尚未重新枚举")
+	// /dev/cdc-wdm-new-qmi 是虚构路径，没有真实硬件，真正打开 QMI 设备终究会失败；
+	// 但 startQMICoreWithStartupBudget 把"打开失败/超时"当作可重试的瞬时故障处理
+	// （转入后台重试循环），并不会让 AddWorkerFromConfig 返回 error。这一分类取决
+	// 于失败在 1.5s 预算内被判定为 abort（快速失败，如无 qmi-proxy 时 dial 立即被拒）
+	// 还是 retry（如本机装有 qmi-proxy，fork 后在预算内反复重试拨号直至超时，被归为
+	// 可重试的 DeadlineExceeded）——因此是否安装/存在 qmi-proxy 会决定走哪条分支。
+	// 因此这里对成功和失败两种结果分别断言 rebind 逻辑是否生效，而不是假设必然出错。
+	w, err := p.AddWorkerFromConfig(devCfg)
+	if err != nil {
+		// 错误不能是"静态控制口不存在"的早退错误（即没有在读取旧的
+		// /dev/nonexistent-control-old 时就直接放弃），说明流程确实基于 IMEI
+		// 匹配换成了新发现的设备后才失败。
+		require.NotContains(t, err.Error(), "设备控制口 /dev/nonexistent-control-old 不存在，可能模块尚未重新枚举")
+		return
+	}
+	require.NotNil(t, w)
+	require.Equal(t, "/dev/cdc-wdm-new-qmi", w.Config.ControlDevice)
+	require.Equal(t, "wwan-new", w.Config.Interface)
 }
 
 // TestPoolAddWorkerFromConfigKeepsExistingDeviceErrorBeforeLimitError 测试尝试添加一个已存在的同名设备时，应该返回“设备已存在”错误
