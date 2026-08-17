@@ -235,6 +235,10 @@ function servingMccMnc(modem: ModemStatus | undefined): string {
   return mcc && mnc ? `${mcc}${mnc}` : ''
 }
 
+function isNumericCode(s: string): boolean {
+  return /^[0-9]+$/.test(s)
+}
+
 function pnnDisplayName(record: PNNRecord | undefined): string {
   return normalizeSPN(record?.full_name) || normalizeSPN(record?.short_name)
 }
@@ -401,8 +405,11 @@ const selectedRegisteredNetworkDisplay = computed(() => {
   if (!d) return '--'
   const operator = normalizeSPN(d?.modem?.operator)
   const code = servingMccMnc(d?.modem)
-  if (operator) return formatNamedOperator(operator, code)
+  // 后端只解析出中国大陆/香港/台湾的运营商名称，其余地区会原样回落成数字 PLMN；
+  // 此时改用全球 MCC/MNC 表按 code 查名，而不是把数字当作运营商名称直接显示。
+  if (operator && !isNumericCode(operator)) return formatNamedOperator(operator, code)
   if (code) return formatMccMncOperator(code)
+  if (operator) return formatNamedOperator(operator, '')
   return '--'
 })
 

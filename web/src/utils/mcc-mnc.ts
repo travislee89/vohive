@@ -7,12 +7,6 @@ export type MccMncRow = {
   network: string
 }
 
-export type ServingOperatorLike = {
-  operator?: string
-  mcc?: string
-  mnc?: string
-}
-
 const TABLE_URL = 'https://raw.githubusercontent.com/musalbas/mcc-mnc-table/refs/heads/master/mcc-mnc-table.json'
 const STORAGE_KEY = 'go-4gproxy:mcc-mnc-table:v1'
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -23,14 +17,6 @@ type CachePayload = {
 }
 
 let indexPromise: Promise<Map<string, MccMncRow>> | null = null
-
-function isAllDigits(s: string): boolean {
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i)
-    if (c < 48 || c > 57) return false
-  }
-  return s.length > 0
-}
 
 function normalizeCode(s: string): string {
   return String(s || '').trim()
@@ -136,44 +122,4 @@ export function isoToFlagEmoji(iso: string): string {
   const b = s.charCodeAt(1)
   if (a < 65 || a > 90 || b < 65 || b > 90) return ''
   return String.fromCodePoint(0x1f1e6 + (a - 65)) + String.fromCodePoint(0x1f1e6 + (b - 65))
-}
-
-export function getMncCandidateLengths(mcc: string): number[] {
-  const m3 = [
-    '302', '308', // 加拿大等
-    '310', '311', '312', '313', '314', '315', '316', '332', '318', '319', '334', '350', // 美国及属地
-    '338', '348', '342', '344', '346', '354', '356', '358', '360', '362', '364', '365', '366', '368', '370', '372', '374', '376',
-    '405', '406', // 印度 (部分)
-    '716', '722', '730', '732', '736', '740', '744', '746', '748', '750', // 南美洲
-  ]
-  if (m3.includes(mcc)) return [3]
-  return [2, 3] // 其他地区默认优先 2位, 然后是3位
-}
-
-export function lookupServingOperatorNameFromPLMN(index: Map<string, MccMncRow>, modem: ServingOperatorLike): MccMncRow | null {
-  const op = normalizeCode(modem?.operator || '')
-  if (op && (op.length === 5 || op.length === 6) && isAllDigits(op)) {
-    const hit = index.get(op)
-    if (hit) return hit
-  }
-
-  const mcc = normalizeCode(modem?.mcc || '')
-  const mnc = normalizeCode(modem?.mnc || '')
-  if (mcc && mnc) {
-    const hit = index.get(`${mcc}${mnc}`)
-    if (hit) return hit
-  }
-
-  return null
-}
-
-export function formatServingOperatorDisplay(modem: ServingOperatorLike, index: Map<string, MccMncRow> | null): string {
-  const op = normalizeCode(modem?.operator || '')
-  if (!index) return op || '--'
-  const row = lookupServingOperatorNameFromPLMN(index, modem)
-  if (!row) return op || '--'
-  const flag = isoToFlagEmoji(row.iso)
-  const name = normalizeCode(row.network) || normalizeCode(row.country) || '--'
-  const code = `${normalizeCode(row.mcc)}${normalizeCode(row.mnc)}`
-  return `${flag ? flag + ' ' : ''}${name}${code ? ` (${code})` : ''}`
 }

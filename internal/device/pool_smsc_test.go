@@ -89,8 +89,8 @@ func TestWorkerRefreshRuntimeProjectsSMSCAndServingPLMN(t *testing.T) {
 	if st.SMSC != "+8613800100500" {
 		t.Fatalf("ProjectDeviceStatus().SMSC=%q want=%q", st.SMSC, "+8613800100500")
 	}
-	if st.ServingMCC != "460" || st.ServingMNC != "2" {
-		t.Fatalf("ProjectDeviceStatus().serving=%s/%s want 460/2", st.ServingMCC, st.ServingMNC)
+	if st.ServingMCC != "460" || st.ServingMNC != "02" {
+		t.Fatalf("ProjectDeviceStatus().serving=%s/%s want 460/02", st.ServingMCC, st.ServingMNC)
 	}
 	if st.Operator != "China Mobile" {
 		t.Fatalf("ProjectDeviceStatus().Operator=%q want China Mobile", st.Operator)
