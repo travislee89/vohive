@@ -224,6 +224,7 @@ export type ModemStatus = {
   nr5g_signal_sinr?: number
   reg_status?: number
   reg_status_text?: string
+  ps_attached?: boolean
   lac?: string
   cell_id?: string
   usbnet_mode?: number
