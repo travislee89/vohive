@@ -1381,7 +1381,12 @@ usePollingScheduler(async () => {
               </div>
             </el-tab-pane>
             <el-tab-pane label="蜂窝网络" name="cellular" lazy>
-              <DeviceCellularTab :device="selectedDevice" />
+              <DeviceCellularTab
+                :device="selectedDevice"
+                :operator-name-display="selectedOperatorNameDisplay"
+                :sim-operator-display="selectedSimOperatorDisplay"
+                :mcc-mnc-index="mccMncIndex"
+              />
             </el-tab-pane>
             <el-tab-pane label="eSIM" name="esim" lazy>
               <DeviceEsimTab :device-id="selectedDevice.id" :device-imei="selectedDevice.modem?.imei || ''" :is-active="activeTab === 'esim'" />

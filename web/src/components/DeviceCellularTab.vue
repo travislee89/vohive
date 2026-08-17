@@ -3,12 +3,16 @@ import { computed } from 'vue'
 import { Copy20Regular } from '@vicons/fluent'
 import type { DeviceOverviewItem } from '../types/api'
 import { copyToClipboard } from '../utils/clipboard'
+import { resolveOperatorName, type MccMncRow } from '../utils/mcc-mnc'
 import StatusLight from './StatusLight.vue'
 import type { StatusLightTone } from './statusLight'
 import FieldRow from './FieldRow.vue'
 
 const props = defineProps<{
   device: DeviceOverviewItem | null
+  operatorNameDisplay: string
+  simOperatorDisplay: string
+  mccMncIndex: Map<string, MccMncRow> | null
 }>()
 
 const modem = computed(() => props.device?.modem)
@@ -76,6 +80,8 @@ function levelFor(value: number | null, thresholds: number[]): Level {
 }
 
 // 阈值以业界常用 LTE/NR 参考区间为准，从低到高
+// RSSI 阈值与概览页「信号强度」卡片保持一致，因为综合信号强度对外统一以 RSSI 为准
+const rssiLevel = computed(() => levelFor(num(modem.value?.signal_dbm), [-105, -95, -85, -75]))
 const rsrpLevel = computed(() => levelFor(num(modem.value?.signal_rsrp), [-115, -105, -95, -80]))
 const rsrqLevel = computed(() => levelFor(num(modem.value?.signal_rsrq), [-20, -15, -11, -8]))
 const sinrLevel = computed(() => levelFor(num(modem.value?.signal_sinr), [-3, 0, 10, 20]))
@@ -83,16 +89,8 @@ const nr5gSinrLevel = computed(() => levelFor(num(modem.value?.nr5g_signal_sinr)
 
 const hasNR5G = computed(() => num(modem.value?.nr5g_signal_sinr) !== null)
 
-const overallLevel = computed(() => {
-  // 综合评级取 RSRP 与 SINR 中较差的一档，更贴近实际体验
-  const a = rsrpLevel.value.bars
-  const b = sinrLevel.value.bars
-  const bars = a && b ? Math.min(a, b) : a || b
-  return bars
-})
-
 const metricRows = computed(() => [
-  { label: 'RSSI', value: numText(modem.value?.signal_dbm, ' dBm'), level: null as Level | null },
+  { label: 'RSSI', value: numText(modem.value?.signal_dbm, ' dBm'), level: rssiLevel.value },
   { label: 'RSRP', value: numText(modem.value?.signal_rsrp, ' dBm'), level: rsrpLevel.value },
   { label: 'RSRQ', value: numText(modem.value?.signal_rsrq, ' dB'), level: rsrqLevel.value },
   { label: 'SINR', value: numText(modem.value?.signal_sinr, ' dB'), level: sinrLevel.value },
@@ -109,6 +107,20 @@ const servingPlmn = computed(() => {
   const mcc = modem.value?.serving_mcc
   const mnc = modem.value?.serving_mnc
   return mcc || mnc ? `${mcc || '--'}-${mnc || '--'}` : '--'
+})
+
+const nativePlmnDisplay = computed(() => {
+  if (nativePlmn.value === '--') return undefined
+  const code = `${modem.value?.native_mcc || ''}${modem.value?.native_mnc || ''}`
+  const name = resolveOperatorName('', code, props.mccMncIndex)
+  return name ? `${nativePlmn.value} · ${name}` : nativePlmn.value
+})
+
+const servingPlmnDisplay = computed(() => {
+  if (servingPlmn.value === '--') return undefined
+  const code = `${modem.value?.serving_mcc || ''}${modem.value?.serving_mnc || ''}`
+  const name = resolveOperatorName(modem.value?.operator, code, props.mccMncIndex)
+  return name ? `${servingPlmn.value} · ${name}` : servingPlmn.value
 })
 
 // ---- 小区定位参数（供第三方基站定位 API 使用）----
@@ -153,8 +165,8 @@ async function copyLocationJSON() {
             <div class="flex-1 min-w-0">
               <div class="text-sm font-bold leading-tight"
                 :class="isRegistered ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-500 dark:text-gray-400'">
-                {{ modem?.operator || '--' }}
-                <span v-if="ratDisplay !== '--'" class="opacity-70">· {{ ratDisplay }}</span>
+                {{ operatorNameDisplay || modem?.operator || '--' }}
+                <span v-if="ratDisplay !== '--'" class="opacity-70">· {{ ratDisplay }}{{ isRoaming ? ' ·' : '' }}</span>
                 <el-tag v-if="isRoaming" type="warning" size="small" effect="light" class="ml-1">漫游</el-tag>
               </div>
               <div class="text-xs text-gray-400 mt-0.5">{{ modem?.reg_status_text || '--' }}</div>
@@ -183,17 +195,17 @@ async function copyLocationJSON() {
               <div v-for="i in 5" :key="i"
                 class="w-2 rounded-sm"
                 :style="{ height: (i * 16 + 20) + '%' }"
-                :class="i <= overallLevel ? (rsrpLevel.barClass) : 'bg-gray-200 dark:bg-white/10'"
+                :class="i <= rssiLevel.bars ? (rssiLevel.barClass) : 'bg-gray-200 dark:bg-white/10'"
               />
             </div>
             <div>
               <div class="flex items-baseline gap-1.5">
-                <span class="text-2xl font-extrabold tabular-nums leading-none" :class="rsrpLevel.textClass">
-                  {{ numText(modem?.signal_rsrp) }}
+                <span class="text-2xl font-extrabold tabular-nums leading-none" :class="rssiLevel.textClass">
+                  {{ numText(modem?.signal_dbm) }}
                 </span>
-                <span class="text-xs text-gray-400">dBm RSRP</span>
+                <span class="text-xs text-gray-400">dBm RSSI</span>
               </div>
-              <div class="text-xs mt-0.5" :class="rsrpLevel.textClass">综合信号：{{ rsrpLevel.text }}</div>
+              <div class="text-xs mt-0.5" :class="rssiLevel.textClass">综合信号：{{ rssiLevel.text }}</div>
             </div>
           </div>
 
@@ -225,9 +237,9 @@ async function copyLocationJSON() {
         <div class="ui-panel-muted p-4">
           <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">归属与漫游</div>
           <div class="space-y-1.5 text-sm text-gray-700 dark:text-gray-200">
-            <FieldRow label="归属运营商" :value="modem?.native_spn" copyable />
-            <FieldRow label="归属 PLMN (MCC-MNC)" :value="nativePlmn === '--' ? undefined : nativePlmn" monospace copyable />
-            <FieldRow label="当前驻留 PLMN (MCC-MNC)" :value="servingPlmn === '--' ? undefined : servingPlmn" monospace copyable />
+            <FieldRow label="归属运营商" :value="simOperatorDisplay" copyable />
+            <FieldRow label="归属 PLMN (MCC-MNC)" :value="nativePlmnDisplay" copyable />
+            <FieldRow label="当前驻留 PLMN (MCC-MNC)" :value="servingPlmnDisplay" copyable />
             <div class="flex w-full items-center justify-between gap-3">
               <span class="text-gray-500">漫游状态</span>
               <el-tag :type="isRoaming ? 'warning' : 'info'" size="small" effect="light">
