@@ -89,7 +89,7 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             ENABLE_UPX_RAW="${{ github.event.inputs.enable_upx }}"
           else
-            ENABLE_UPX_RAW="true"
+            ENABLE_UPX_RAW="false"
           fi
           case "${ENABLE_UPX_RAW}" in
             false|0|no|off) ENABLE_UPX=0 ;;

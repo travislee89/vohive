@@ -16,14 +16,14 @@ AMD64_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_amd64
 ARM64_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_arm64
 ARMV7_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_armv7
 
-# Compress binary: enabled when UPX is present, silently skipped when absent (does not affect build).
-# Can be skipped by having the caller explicitly disable it (e.g. CI's disable-upx-by-default) or by setting UPX=.
+# Compress binary: disabled by default. Opt in with ENABLE_UPX=1 (requires upx/upx-ucl on PATH).
+ENABLE_UPX ?= 0
 UPX ?= $(shell command -v upx || command -v upx-ucl)
 UPX_FLAGS ?= --best --lzma
 
-# compress-if-upx compresses the target binary when UPX is available, otherwise silently skips.
+# compress-if-upx compresses the target binary when ENABLE_UPX=1 and UPX is available, otherwise silently skips.
 define compress-if-upx
-	@if [ -n "$(UPX)" ]; then \
+	@if [ "$(ENABLE_UPX)" = "1" ] && [ -n "$(UPX)" ]; then \
 		echo "→ Compressing $1 ($(UPX) $(UPX_FLAGS))"; \
 		$(UPX) $(UPX_FLAGS) "$1" || { echo "Warning: UPX compression failed, keeping uncompressed binary"; }; \
 	fi
