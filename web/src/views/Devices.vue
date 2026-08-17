@@ -10,6 +10,7 @@ import DeviceListPanel from '../components/DeviceListPanel.vue'
 import DeviceDetailLoading from '../components/DeviceDetailLoading.vue'
 import DeviceDetailHeader from '../components/DeviceDetailHeader.vue'
 import DeviceOverviewTab from '../components/DeviceOverviewTab.vue'
+import DeviceCellularTab from '../components/DeviceCellularTab.vue'
 import DeviceEsimTab from '../components/DeviceEsimTab.vue'
 import DeviceAtTab from '../components/DeviceAtTab.vue'
 import DeviceUssdTab from '../components/DeviceUssdTab.vue'
@@ -1378,6 +1379,9 @@ usePollingScheduler(async () => {
                   @rollup="triggerDeviceTrafficRollup"
                 />
               </div>
+            </el-tab-pane>
+            <el-tab-pane label="蜂窝网络" name="cellular" lazy>
+              <DeviceCellularTab :device="selectedDevice" />
             </el-tab-pane>
             <el-tab-pane label="eSIM" name="esim" lazy>
               <DeviceEsimTab :device-id="selectedDevice.id" :device-imei="selectedDevice.modem?.imei || ''" :is-active="activeTab === 'esim'" />

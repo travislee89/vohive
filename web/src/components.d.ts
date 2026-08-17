@@ -18,6 +18,7 @@ declare module 'vue' {
     DeviceAddDialog: typeof import('./components/DeviceAddDialog.vue')['default']
     DeviceAtTab: typeof import('./components/DeviceAtTab.vue')['default']
     DeviceCard: typeof import('./components/DeviceCard.vue')['default']
+    DeviceCellularTab: typeof import('./components/DeviceCellularTab.vue')['default']
     DeviceConfigTab: typeof import('./components/DeviceConfigTab.vue')['default']
     DeviceDetailHeader: typeof import('./components/DeviceDetailHeader.vue')['default']
     DeviceDetailLoading: typeof import('./components/DeviceDetailLoading.vue')['default']
