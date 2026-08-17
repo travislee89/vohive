@@ -21,6 +21,12 @@ var validNotifyChannelKeys = map[string]bool{
 	"pushplus": true,
 }
 
+// validNotifyMessageTypes 是当前支持建立转发规则的消息类型集合。
+var validNotifyMessageTypes = map[string]bool{
+	"sms":              true,
+	"automation_event": true,
+}
+
 // notifyRuleResponse 是 NotifyRule 面向前端的展开形式（target_channels 由内部 JSON 列解码为数组）。
 type notifyRuleResponse struct {
 	ID             string   `json:"id"`
@@ -112,8 +118,8 @@ func (s *Server) handleCreateNotifyRule(c *gin.Context) {
 	if req.MessageType == "" {
 		req.MessageType = "sms"
 	}
-	if req.MessageType != "sms" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "v1 仅支持 message_type=sms"})
+	if !validNotifyMessageTypes[req.MessageType] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的 message_type: " + req.MessageType})
 		return
 	}
 	name := strings.TrimSpace(derefString(req.Name))

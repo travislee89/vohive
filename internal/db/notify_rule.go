@@ -10,11 +10,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// NotifyRule 是通知中心的转发规则：某种消息类型（v1 仅 "sms"）在满足匹配条件时，
+// NotifyRule 是通知中心的转发规则：某种消息类型（"sms" | "automation_event"）在满足匹配条件时，
 // 转发到指定的一组通知渠道，并可自定义标题/正文模板。
 type NotifyRule struct {
 	ID             string    `gorm:"primaryKey" json:"id"`
-	MessageType    string    `gorm:"column:message_type;index" json:"message_type"` // v1 仅 "sms"
+	MessageType    string    `gorm:"column:message_type;index" json:"message_type"` // sms | automation_event
 	Name           string    `gorm:"column:name" json:"name"`
 	Enabled        bool      `gorm:"column:enabled" json:"enabled"`
 	Priority       int       `gorm:"column:priority" json:"priority"`           // 数值越小越先匹配；命中即停止

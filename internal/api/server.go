@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/travislee89/vohive/internal/automation"
 	"github.com/travislee89/vohive/internal/config"
 	"github.com/travislee89/vohive/internal/data/repo"
 	"github.com/travislee89/vohive/internal/db"
@@ -31,8 +32,8 @@ import (
 	"github.com/travislee89/vowifi-go/runtimehost/messaging"
 	"github.com/travislee89/vowifi-go/runtimehost/voicehost"
 
-	"github.com/travislee89/vohive/pkg/logger"
 	"github.com/spf13/viper"
+	"github.com/travislee89/vohive/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -80,6 +81,7 @@ type Server struct {
 	voiceGW     *voicehost.Gateway
 	notifyMgr   *notify.Manager
 	websheets   *vwebsheet.Broker
+	automation  *automation.Runner // 自动化中心任务执行器；main.go 在启动调度器后通过 SetAutomationRunner 注入
 
 	httpSrvMu sync.Mutex
 	httpSrv   *http.Server
@@ -124,6 +126,10 @@ func New(cfg *config.Config, pool *device.Pool, fs http.FileSystem, proxyMgr *se
 
 func (s *Server) SetRealtimeTraffic(m *proxytraffic.RealtimeManager) {
 	s.trafficRT = m
+}
+
+func (s *Server) SetAutomationRunner(r *automation.Runner) {
+	s.automation = r
 }
 
 // checkPassword 验证密码，支持 bcrypt 哈希和明文（向后兼容）
@@ -244,10 +250,10 @@ func (s *Server) newRouter() *gin.Engine {
 		api.POST("/traffic/rollup", s.handleTrafficRollup)          // 手动触发流量上卷回填
 
 		// ===== 短信 =====
-		api.POST("/sms/send", s.handleSendSMS)                    // 发送短信（自动选择 AT 或 VoWiFi）
-		api.GET("/sms/delivery/:message_id", s.handleSMSDelivery) // 查询发送投递状态
-		api.GET("/sms/contacts", s.handleGetSMSContacts)          // 获取短信联系人列表
-		api.GET("/sms/thread", s.handleGetSMSThread)              // 获取与某联系人的短信会话
+		api.POST("/sms/send", s.handleSendSMS)                             // 发送短信（自动选择 AT 或 VoWiFi）
+		api.GET("/sms/delivery/:message_id", s.handleSMSDelivery)          // 查询发送投递状态
+		api.GET("/sms/contacts", s.handleGetSMSContacts)                   // 获取短信联系人列表
+		api.GET("/sms/thread", s.handleGetSMSThread)                       // 获取与某联系人的短信会话
 		api.DELETE("/sms/messages/:id", s.handleDeleteSMSMessage)          // 删除单条历史短信
 		api.DELETE("/sms/thread", s.handleDeleteSMSThread)                 // 删除指定历史短信会话
 		api.GET("/sms/messages/:id/forward-log", s.handleGetSMSForwardLog) // 查询单条短信的转发日志明细
@@ -295,6 +301,18 @@ func (s *Server) newRouter() *gin.Engine {
 		api.DELETE("/notify/logs", s.handleDeleteNotifyLogs)                // 高级清理（按条件手动删除）
 		api.GET("/notify/logs/retention", s.handleGetNotifyLogRetention)    // 获取自动清理设置
 		api.PUT("/notify/logs/retention", s.handleUpdateNotifyLogRetention) // 更新自动清理设置
+
+		// ===== 自动化中心 (任务/运行日志) =====
+		api.GET("/automation/tasks", s.handleListAutomationTasks)                   // 列出自动化任务
+		api.POST("/automation/tasks", s.handleCreateAutomationTask)                 // 新建自动化任务
+		api.PUT("/automation/tasks/:id", s.handleUpdateAutomationTask)              // 更新自动化任务
+		api.PATCH("/automation/tasks/:id", s.handleToggleAutomationTask)            // 启用/停用任务
+		api.DELETE("/automation/tasks/:id", s.handleDeleteAutomationTask)           // 删除自动化任务
+		api.POST("/automation/tasks/:id/run", s.handleRunAutomationTaskNow)         // 立即执行一次
+		api.GET("/automation/logs", s.handleListAutomationLogs)                     // 分页查询运行日志
+		api.DELETE("/automation/logs", s.handleDeleteAutomationLogs)                // 高级清理（按条件手动删除）
+		api.GET("/automation/logs/retention", s.handleGetAutomationLogRetention)    // 获取自动清理设置
+		api.PUT("/automation/logs/retention", s.handleUpdateAutomationLogRetention) // 更新自动清理设置
 
 		api.GET("/devices/:device_id/operator_selection/scan", s.handleDeviceMgmtOperatorScan)              // 扫描运营商
 		api.GET("/devices/:device_id/operator_selection/scan/stream", s.handleDeviceMgmtOperatorScanStream) // SSE 扫描运营商
@@ -1156,54 +1174,18 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 		return
 	}
 
-	// 获取 IMSI 用于入库
-	imsi = worker.GetIMSI()
-	messageID := ""
-	partsTotal := 1
-	deliveryState := "acked"
-
-	if s.pool.IsVoWiFiActive(deviceID) {
-		// VoWiFi 模式下使用 IMS Core 发送；短信历史由宿主侧 runtime event / failure recorder 入库。
-		outcome, err := s.pool.SendVoWiFiSMSWithOptions(c.Request.Context(), deviceID, req.Phone, req.Message, sendOpts)
-		if outcome.PartsTotal > 0 {
-			partsTotal = outcome.PartsTotal
-		}
-		if strings.TrimSpace(outcome.DeliveryState) != "" {
-			deliveryState = strings.TrimSpace(outcome.DeliveryState)
-		}
-		messageID = strings.TrimSpace(outcome.MessageID)
-		if err != nil {
-			_ = device.RecordVoWiFiSMSSendFailure(s.pool, deviceID, req.Phone, req.Message, time.Now())
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"status":         "error",
-				"message":        "VoWiFi 短信发送失败: " + err.Error(),
-				"device":         deviceID,
-				"phone":          req.Phone,
-				"message_id":     messageID,
-				"parts_total":    partsTotal,
-				"delivery_state": deliveryState,
-			})
-			return
-		}
-	} else {
-		// 普通模式使用 AT 发送
-		if err := worker.SendSMSWithOptions(req.Phone, req.Message, sendOpts); err != nil {
-			// 发送失败，入库记录（status=3）
-			if imsi != "" {
-				_, _ = db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 3, time.Now())
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"status":  "error",
-				"message": "发送失败: " + err.Error(),
-				"device":  deviceID,
-				"phone":   req.Phone,
-			})
-			return
-		}
-		// 发送成功，入库记录（status=2）
-		if imsi != "" {
-			_, _ = db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 2, time.Now())
-		}
+	result, err := s.pool.SendSMSAction(c.Request.Context(), deviceID, req.Phone, req.Message, sendOpts)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":         "error",
+			"message":        err.Error(),
+			"device":         deviceID,
+			"phone":          req.Phone,
+			"message_id":     result.MessageID,
+			"parts_total":    result.PartsTotal,
+			"delivery_state": result.DeliveryState,
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1211,9 +1193,9 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 		"message":        "短信发送成功",
 		"device":         deviceID,
 		"phone":          req.Phone,
-		"message_id":     messageID,
-		"parts_total":    partsTotal,
-		"delivery_state": deliveryState,
+		"message_id":     result.MessageID,
+		"parts_total":    result.PartsTotal,
+		"delivery_state": result.DeliveryState,
 	})
 }
 

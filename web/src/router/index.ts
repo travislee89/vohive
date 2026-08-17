@@ -47,6 +47,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/automation',
+      name: 'AutomationCenter',
+      component: () => import('../views/Automation.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/proxy',
       name: 'Proxy',
       component: () => import('../views/Proxy.vue'),

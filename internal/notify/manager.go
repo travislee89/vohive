@@ -25,7 +25,8 @@ type NotificationContext struct {
 	DeviceID   string
 	DeviceName string
 	Timestamp  time.Time
-	SMS        *SMSContext // 仅 sms_received 事件非空，供转发规则匹配/模板渲染使用
+	SMS        *SMSContext        // 仅 sms_received 事件非空，供转发规则匹配/模板渲染使用
+	Automation *AutomationContext // 仅 automation_event 事件非空，供转发规则匹配/模板渲染使用
 }
 
 // SMSContext 携带短信通知的结构化字段，供转发规则做条件匹配与模板变量渲染。
@@ -36,6 +37,17 @@ type SMSContext struct {
 	Source     string // 蜂窝 | VoWiFi
 	LocalPhone string // 本机号码（best-effort 解析，可能为空）
 	Operator   string // 运营商（best-effort 解析，可能为空）
+}
+
+// AutomationContext 携带自动化任务执行结果的结构化字段，供转发规则做条件匹配与模板变量渲染。
+type AutomationContext struct {
+	TaskID        string
+	TaskName      string
+	ActionType    string // reboot | sms
+	DeviceID      string
+	Status        string // success | failed
+	ResultSummary string
+	ErrorDetail   string
 }
 
 func (c NotificationContext) DeviceLabel() string {
@@ -334,6 +346,33 @@ func (m *Manager) resolveSMSMeta(deviceID string) (localPhone, operator string) 
 	return localPhone, operator
 }
 
+// NotifyAutomationEvent 发送自动化中心任务执行结果通知——由 internal/automation.Runner 在每次
+// 任务执行（含"全部设备"展开后的每个设备）后调用，走与 SMS 相同的转发规则引擎（message_type=automation_event）。
+func (m *Manager) NotifyAutomationEvent(ctx AutomationContext) {
+	statusLabel := "成功"
+	if ctx.Status != db.NotifyLogStatusSuccess {
+		statusLabel = "失败"
+	}
+	actionLabel := ctx.ActionType
+	switch ctx.ActionType {
+	case "reboot":
+		actionLabel = "重启基带"
+	case "sms":
+		actionLabel = "发送短信"
+	}
+	msg := fmt.Sprintf("自动化任务 / %s\n任务    %s\n动作    %s\n设备    %s\n结果    %s",
+		statusLabel, ctx.TaskName, actionLabel, ctx.DeviceID, ctx.ResultSummary)
+
+	m.broadcastWithContext(NotificationContext{
+		Event:      "automation_event",
+		Text:       msg,
+		DeviceID:   ctx.DeviceID,
+		DeviceName: m.resolveDeviceName(ctx.DeviceID),
+		Timestamp:  time.Now(),
+		Automation: &ctx,
+	})
+}
+
 // NotifyRaw 发送原始文本通知到所有渠道
 func (m *Manager) NotifyRaw(msg string) {
 	m.broadcastWithContext(NotificationContext{
@@ -404,10 +443,14 @@ func (m *Manager) broadcastWithContext(ctx NotificationContext) {
 		ctx.Event = "notification"
 	}
 
-	// SMS 事件走转发规则引擎（按规则匹配后有选择地转发到目标渠道并记录日志）；
+	// SMS / 自动化事件走转发规则引擎（按规则匹配后有选择地转发到目标渠道并记录日志）；
 	// 其余事件类型（ip_rotated/incoming_call/raw 等）v1 未建规则，保持原有「广播到所有已启用渠道」行为。
-	if ctx.SMS != nil {
-		m.broadcastSMSWithRules(ctx)
+	switch {
+	case ctx.SMS != nil:
+		m.broadcastWithRules(ctx, "sms")
+		return
+	case ctx.Automation != nil:
+		m.broadcastWithRules(ctx, "automation_event")
 		return
 	}
 
@@ -436,22 +479,23 @@ func (m *Manager) channelsByName() map[string]Channel {
 	return out
 }
 
-// broadcastSMSWithRules 用转发规则引擎处理 SMS 通知：匹配到规则则渲染模板并按规则指定的渠道发送，
-// 每次渠道发送尝试都写一条转发日志；未匹配到任何规则则不转发，写一条 status=unmatched 的日志。
-func (m *Manager) broadcastSMSWithRules(ctx NotificationContext) {
+// broadcastWithRules 用转发规则引擎处理指定消息类型（sms / automation_event）的通知：
+// 匹配到规则则渲染模板并按规则指定的渠道发送，每次渠道发送尝试都写一条转发日志；
+// 未匹配到任何规则则不转发，写一条 status=unmatched 的日志。
+func (m *Manager) broadcastWithRules(ctx NotificationContext, messageType string) {
 	var smsIDPtr *uint
 	if ctx.SMS != nil && ctx.SMS.ID != 0 {
 		id := ctx.SMS.ID
 		smsIDPtr = &id
 	}
 
-	rule, err := evaluateSMSRules(ctx)
+	rule, err := evaluateRules(messageType, ctx)
 	if err != nil {
 		logger.Warn("转发规则匹配失败", "event", ctx.Event, "err", err)
 	}
 	if rule == nil {
 		if err := db.CreateNotifyLog(db.NotifyLog{
-			MessageType:    "sms",
+			MessageType:    messageType,
 			Status:         db.NotifyLogStatusUnmatched,
 			ContentSummary: db.SummarizeNotifyLogContent(ctx.Text),
 			DeviceID:       ctx.DeviceID,
@@ -464,7 +508,7 @@ func (m *Manager) broadcastSMSWithRules(ctx NotificationContext) {
 		return
 	}
 
-	values := buildSMSTemplateValues(ctx)
+	values := buildTemplateValues(messageType, ctx)
 	title := RenderPlaceholders(rule.TitleTemplate, values)
 	body := ctx.Text
 	if strings.TrimSpace(rule.BodyTemplate) != "" {
@@ -487,7 +531,7 @@ func (m *Manager) broadcastSMSWithRules(ctx NotificationContext) {
 
 	// wg/resultMu 用于在所有目标渠道各自异步发送完成后，聚合出一个整体转发状态回写到 sms 行；
 	// 不影响每个渠道各自的发送逻辑和各自的 NotifyLog 写入，聚合本身也在独立 goroutine 里等待，
-	// 不会阻塞 broadcastSMSWithRules 的 fire-and-forget 语义。
+	// 不会阻塞 broadcastWithRules 的 fire-and-forget 语义。
 	var wg sync.WaitGroup
 	var resultMu sync.Mutex
 	var attemptedChannels []string
@@ -527,7 +571,7 @@ func (m *Manager) broadcastSMSWithRules(ctx NotificationContext) {
 				logger.Warn("转发规则渠道发送失败", "channel", target, "rule", ruleName, "err", sendErr)
 			}
 			if err := db.CreateNotifyLog(db.NotifyLog{
-				MessageType:     "sms",
+				MessageType:     messageType,
 				Status:          status,
 				ContentSummary:  db.SummarizeNotifyLogContent(renderedText),
 				MatchedRuleID:   &ruleID,

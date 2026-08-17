@@ -27,13 +27,23 @@ const SMS_TEMPLATE_VARIABLES = [
   { key: 'code', label: '验证码（暂未实现，值将为空）', disabled: true }
 ]
 
+const AUTOMATION_TEMPLATE_VARIABLES = [
+  { key: 'task_name', label: '任务名称' },
+  { key: 'action_type', label: '动作类型' },
+  { key: 'device_id', label: '设备' },
+  { key: 'status', label: '执行状态' },
+  { key: 'result_summary', label: '执行结果' },
+  { key: 'error_detail', label: '错误详情' },
+  { key: 'timestamp', label: '时间' }
+]
+
 const MESSAGE_TYPES = [
   { key: 'sms', label: '短信', supported: true },
   { key: 'ddns', label: 'DDNS', supported: false },
   { key: 'version_update', label: '版本更新', supported: false },
   { key: 'system_event', label: '系统事件', supported: false },
   { key: 'device_status', label: '设备状态', supported: false },
-  { key: 'automation_event', label: '自动化事件', supported: false }
+  { key: 'automation_event', label: '自动化事件', supported: true }
 ]
 
 const activeType = ref('sms')
@@ -44,6 +54,7 @@ const expandedIds = ref<Set<string>>(new Set())
 const savingIds = ref<Set<string>>(new Set())
 
 const activeTypeMeta = computed(() => MESSAGE_TYPES.find((t) => t.key === activeType.value))
+const activeTemplateVariables = computed(() => (activeType.value === 'automation_event' ? AUTOMATION_TEMPLATE_VARIABLES : SMS_TEMPLATE_VARIABLES))
 
 async function loadCounts() {
   for (const t of MESSAGE_TYPES) {
@@ -277,7 +288,7 @@ onMounted(() => {
 
               <div class="space-y-1">
                 <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">标题模板</label>
-                <TemplateVariableInput v-model="rule.title_template" :variables="SMS_TEMPLATE_VARIABLES" placeholder="留空则不附加标题" />
+                <TemplateVariableInput v-model="rule.title_template" :variables="activeTemplateVariables" placeholder="留空则不附加标题" />
               </div>
 
               <div class="space-y-1">
@@ -288,7 +299,7 @@ onMounted(() => {
                       v-model="rule.body_template"
                       type="textarea"
                       :rows="4"
-                      :variables="SMS_TEMPLATE_VARIABLES"
+                      :variables="activeTemplateVariables"
                       placeholder="留空则直接转发原始短信内容"
                     />
                   </el-tab-pane>
@@ -297,7 +308,7 @@ onMounted(() => {
                       v-model="rule.body_template"
                       type="textarea"
                       :rows="4"
-                      :variables="SMS_TEMPLATE_VARIABLES"
+                      :variables="activeTemplateVariables"
                       placeholder='{"text": "{{content}}"}'
                     />
                     <div class="text-[10px] text-gray-400 mt-1">仅 Webhook 通道支持自定义请求体，其余通道将回退为纯文本发送。</div>

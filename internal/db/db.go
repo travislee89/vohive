@@ -89,11 +89,11 @@ type SMS struct {
 	Sender          string     `json:"sender"`
 	Recipient       string     `json:"recipient"`
 	Content         string     `json:"content"`
-	Type            int        `json:"type"`   // 1: 接收, 2: 发送
-	Status          int        `json:"status"` // 0: 未读, 1: 已读, 2: 发送成功, 3: 发送失败
-	ForwardStatus   int        `gorm:"column:forward_status" json:"forward_status"`                 // 0: 未转发, 1: 转发成功, 2: 转发失败, 3: 部分成功
+	Type            int        `json:"type"`                                        // 1: 接收, 2: 发送
+	Status          int        `json:"status"`                                      // 0: 未读, 1: 已读, 2: 发送成功, 3: 发送失败
+	ForwardStatus   int        `gorm:"column:forward_status" json:"forward_status"` // 0: 未转发, 1: 转发成功, 2: 转发失败, 3: 部分成功
 	ForwardedAt     *time.Time `gorm:"column:forwarded_at" json:"forwarded_at,omitempty"`
-	ForwardChannels string     `gorm:"column:forward_channels" json:"-"`                             // JSON 编码的已尝试渠道 key 数组
+	ForwardChannels string     `gorm:"column:forward_channels" json:"-"`                            // JSON 编码的已尝试渠道 key 数组
 	ForwardRuleName string     `gorm:"column:forward_rule_name" json:"forward_rule_name,omitempty"` // 命中的转发规则名
 	Timestamp       time.Time  `gorm:"index:idx_sms_imsi_peer_ts,priority:3,sort:desc;index:idx_sms_ts,sort:desc;index:idx_sms_imsi_ts,priority:2,sort:desc" json:"timestamp"`
 	CreatedAt       time.Time  `json:"created_at"`
@@ -208,6 +208,9 @@ func Init(dbPath string) error {
 		&NotifyRule{},
 		&NotifyLog{},
 		&NotifySettings{},
+		&AutomationTask{},
+		&AutomationRunLog{},
+		&AutomationSettings{},
 	); err != nil {
 		return err
 	}
