@@ -121,14 +121,20 @@ export function isNumericCode(s: string): boolean {
 
 // resolveOperatorName 处理后端只解析出中国大陆/香港/台湾运营商名称、其余地区原样
 // 回落成数字 PLMN 的情况：此时改用全球 MCC/MNC 表按 code 查名，而不是把数字当作
-// 运营商名称直接显示。
+// 运营商名称直接显示。code 是调用方已知的 serving MCC+MNC（可为空）；如果调用方没有
+// 单独的 code 而 operator 本身就是 5~6 位数字 PLMN（列表/仪表盘等精简响应常见），
+// 也会直接把 operator 当作 code 去查表。
 export function resolveOperatorName(operator: string | undefined, code: string, index: Map<string, MccMncRow> | null): string {
   const op = normalizeCode(operator || '')
   if (op && !isNumericCode(op)) return op
-  if (index && code) {
-    const row = index.get(code)
-    const name = row ? (normalizeCode(row.network) || normalizeCode(row.country)) : ''
-    if (name) return name
+  if (index) {
+    for (const candidate of [code, op]) {
+      const c = normalizeCode(candidate)
+      if (!c || (c.length !== 5 && c.length !== 6) || !isNumericCode(c)) continue
+      const row = index.get(c)
+      const name = row ? (normalizeCode(row.network) || normalizeCode(row.country)) : ''
+      if (name) return name
+    }
   }
   return op
 }
