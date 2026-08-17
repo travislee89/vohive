@@ -116,7 +116,7 @@ jobs:
         shell: bash
         env:
           INPUT_VERSION: ${{ github.event.inputs.version || 'dev' }}
-          INPUT_ENABLE_UPX: ${{ github.event.inputs.enable_upx || 'true' }}
+          INPUT_ENABLE_UPX: ${{ github.event.inputs.enable_upx || 'false' }}
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             VERSION="${GITHUB_REF_NAME}"
@@ -129,7 +129,7 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             ENABLE_UPX_RAW="${INPUT_ENABLE_UPX}"
           else
-            ENABLE_UPX_RAW="true"
+            ENABLE_UPX_RAW="false"
           fi
 
           case "${ENABLE_UPX_RAW}" in
