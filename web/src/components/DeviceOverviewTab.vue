@@ -12,6 +12,7 @@ import type { StatusLightTone } from './statusLight'
 
 const props = defineProps<{
   device: DeviceOverviewItem | null
+  operatorNameDisplay: string
   simOperatorDisplay: string
   registeredNetworkDisplay: string
   trafficSpeedRx: string
@@ -263,8 +264,9 @@ const networkPanelMessage = computed(() => {
                   : 'text-gray-500 dark:text-gray-400'"
             >
               <template v-if="isRegistered">
-                {{ device?.modem?.operator || '--' }}
+                {{ operatorNameDisplay || device?.modem?.operator || '--' }}
                 <span v-if="device?.modem?.network_mode" class="opacity-70">· {{ [device?.modem?.network_duplex, device?.modem?.network_mode].filter(Boolean).join(' ') }}</span>
+                <span v-if="isRoaming" class="opacity-70">·</span>
                 <el-tag v-if="isRoaming" type="warning" size="small" effect="light" class="ml-1">漫游</el-tag>
               </template>
               <template v-else>
