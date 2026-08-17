@@ -115,6 +115,24 @@ export async function getMccMncIndex(): Promise<Map<string, MccMncRow>> {
   return indexPromise
 }
 
+export function isNumericCode(s: string): boolean {
+  return /^[0-9]+$/.test(normalizeCode(s))
+}
+
+// resolveOperatorName 处理后端只解析出中国大陆/香港/台湾运营商名称、其余地区原样
+// 回落成数字 PLMN 的情况：此时改用全球 MCC/MNC 表按 code 查名，而不是把数字当作
+// 运营商名称直接显示。
+export function resolveOperatorName(operator: string | undefined, code: string, index: Map<string, MccMncRow> | null): string {
+  const op = normalizeCode(operator || '')
+  if (op && !isNumericCode(op)) return op
+  if (index && code) {
+    const row = index.get(code)
+    const name = row ? (normalizeCode(row.network) || normalizeCode(row.country)) : ''
+    if (name) return name
+  }
+  return op
+}
+
 export function isoToFlagEmoji(iso: string): string {
   const s = normalizeCode(iso).toUpperCase()
   if (s.length !== 2) return ''

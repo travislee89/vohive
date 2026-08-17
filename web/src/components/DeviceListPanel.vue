@@ -5,6 +5,7 @@ import ListSkeleton from './ListSkeleton.vue'
 import StatusLight from './StatusLight.vue'
 import type { DeviceMgmtListItem } from '../types/api'
 import { isControlOnline, isRadioRegistered, lifecycleStatusLabel, primaryLifecycleStatus } from '../utils/deviceLifecycle'
+import { resolveOperatorName, type MccMncRow } from '../utils/mcc-mnc'
 
 const props = defineProps<{
   loading: boolean
@@ -14,6 +15,7 @@ const props = defineProps<{
   sortDir: 'asc' | 'desc'
   selectedId: string
   filteredDevices: DeviceMgmtListItem[]
+  mccMncIndex: Map<string, MccMncRow> | null
 }>()
 
 const emit = defineEmits<{
@@ -52,7 +54,8 @@ const registrationText = (d: DeviceMgmtListItem) => {
   const phaseText = lifecycleStatusLabel(d.lifecycle_phase)
   if (phaseText && d.lifecycle_phase !== 'online' && d.lifecycle_phase !== 'offline') return phaseText
   if (isRadioRegistered(d)) {
-    const operator = d?.modem?.operator || '--'
+    const code = [d?.modem?.serving_mcc, d?.modem?.serving_mnc].filter(Boolean).join('')
+    const operator = resolveOperatorName(d?.modem?.operator, code, props.mccMncIndex) || '--'
     const netInfo = [d?.modem?.network_duplex, d?.modem?.network_mode].filter(Boolean).join(' ') || '--'
     const roamingTag = d?.modem?.reg_status === 5 ? ' · 漫游' : ''
     return `${operator} · ${netInfo}${roamingTag}`

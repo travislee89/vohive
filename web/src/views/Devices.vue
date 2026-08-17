@@ -25,7 +25,7 @@ import { debugCollector } from '../debug/collector'
 import { copyToClipboard } from '../utils/clipboard'
 import { isWwanQmiControlPath } from '../utils/deviceBackend'
 import { isControlOnline, isRecoveryPhase } from '../utils/deviceLifecycle'
-import { getMccMncIndex, isoToFlagEmoji, type MccMncRow } from '../utils/mcc-mnc'
+import { getMccMncIndex, isoToFlagEmoji, resolveOperatorName, type MccMncRow } from '../utils/mcc-mnc'
 import type { CardPolicy, CarrierWebsheetInfo, DeviceConfigDTO, DeviceMgmtListItem, DeviceOverviewItem, DiscoveredDevice, ModemStatus, PNNRecord, RealtimeTrafficSnapshot } from '../types/api'
 import type { AppError } from '../types/domain'
 import { toAppError, errorMessage } from '../services/http'
@@ -398,6 +398,14 @@ const selectedSimOperatorDisplay = computed(() => {
   if (spn) return formatNamedOperator(spn, mccmnc)
   if (pnn) return formatNamedOperator(pnn, mccmnc)
   return mccmnc ? formatMccMncOperator(mccmnc) : '--'
+})
+
+const selectedOperatorNameDisplay = computed(() => {
+  const d = selectedDevice.value
+  if (!d) return '--'
+  const operator = normalizeSPN(d?.modem?.operator)
+  const code = servingMccMnc(d?.modem)
+  return resolveOperatorName(operator, code, mccMncIndex.value) || '--'
 })
 
 const selectedRegisteredNetworkDisplay = computed(() => {
@@ -1314,6 +1322,7 @@ usePollingScheduler(async () => {
         :sort-dir="sortDir"
         :selected-id="selectedId"
         :filtered-devices="filteredDevices"
+        :mcc-mnc-index="mccMncIndex"
         @update:query="query = $event"
         @update:status-filter="statusFilter = $event"
         @update:sort-key="sortKey = $event"
@@ -1340,6 +1349,7 @@ usePollingScheduler(async () => {
               <div class="space-y-6">
                 <DeviceOverviewTab
                   :device="selectedDevice"
+                  :operator-name-display="selectedOperatorNameDisplay"
                   :sim-operator-display="selectedSimOperatorDisplay"
                   :registered-network-display="selectedRegisteredNetworkDisplay"
                   :traffic-speed-rx="trafficSpeedRx"
