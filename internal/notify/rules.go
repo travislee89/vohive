@@ -23,10 +23,10 @@ const (
 	SendBodyModeCustomJSON = "custom_json"
 )
 
-// evaluateSMSRules 加载已启用的 sms 规则（按 priority 排序），返回第一条匹配的规则；
-// 无匹配返回 (nil, nil)。首条命中即停止（first-match-wins）。
-func evaluateSMSRules(ctx NotificationContext) (*db.NotifyRule, error) {
-	rules, err := db.ListEnabledNotifyRules("sms")
+// evaluateRules 加载指定消息类型（sms | automation_event）下已启用的规则（按 priority 排序），
+// 返回第一条匹配的规则；无匹配返回 (nil, nil)。首条命中即停止（first-match-wins）。
+func evaluateRules(messageType string, ctx NotificationContext) (*db.NotifyRule, error) {
+	rules, err := db.ListEnabledNotifyRules(messageType)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +80,14 @@ func matchesRule(rule db.NotifyRule, ctx NotificationContext) bool {
 	}
 }
 
+// buildTemplateValues 按消息类型分派到对应的模板变量构造函数。
+func buildTemplateValues(messageType string, ctx NotificationContext) map[string]string {
+	if messageType == "automation_event" {
+		return buildAutomationTemplateValues(ctx)
+	}
+	return buildSMSTemplateValues(ctx)
+}
+
 // buildSMSTemplateValues 组装 SMS 场景下模板占位符可用的全部变量。
 // 注意：没有验证码(OTP)提取能力，因此不提供 "code" 占位符，避免渲染出恒为空的误导值。
 func buildSMSTemplateValues(ctx NotificationContext) map[string]string {
@@ -97,6 +105,27 @@ func buildSMSTemplateValues(ctx NotificationContext) map[string]string {
 		values["source"] = strings.TrimSpace(ctx.SMS.Source)
 		values["local_phone"] = strings.TrimSpace(ctx.SMS.LocalPhone)
 		values["operator"] = strings.TrimSpace(ctx.SMS.Operator)
+	}
+	return values
+}
+
+// buildAutomationTemplateValues 组装自动化事件场景下模板占位符可用的全部变量。
+func buildAutomationTemplateValues(ctx NotificationContext) map[string]string {
+	values := map[string]string{
+		"event":        strings.TrimSpace(ctx.Event),
+		"timestamp":    ctx.Timestamp.Format("2006-01-02 15:04:05"),
+		"device_id":    strings.TrimSpace(ctx.DeviceID),
+		"device_name":  strings.TrimSpace(ctx.DeviceName),
+		"device_label": ctx.DeviceLabel(),
+		"text":         strings.TrimSpace(ctx.Text),
+	}
+	if ctx.Automation != nil {
+		values["task_id"] = strings.TrimSpace(ctx.Automation.TaskID)
+		values["task_name"] = strings.TrimSpace(ctx.Automation.TaskName)
+		values["action_type"] = strings.TrimSpace(ctx.Automation.ActionType)
+		values["status"] = strings.TrimSpace(ctx.Automation.Status)
+		values["result_summary"] = strings.TrimSpace(ctx.Automation.ResultSummary)
+		values["error_detail"] = strings.TrimSpace(ctx.Automation.ErrorDetail)
 	}
 	return values
 }

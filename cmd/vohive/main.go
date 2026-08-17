@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/travislee89/vohive/internal/api"
+	"github.com/travislee89/vohive/internal/automation"
 	"github.com/travislee89/vohive/internal/config"
 	"github.com/travislee89/vohive/internal/db"
 	"github.com/travislee89/vohive/internal/device"
@@ -362,6 +363,34 @@ func main() {
 
 	apiServer := api.New(cfg, pool, staticFS, proxyMgr, voiceGW, notifyMgr, configPath)
 	apiServer.SetRealtimeTraffic(realtimeTraffic)
+
+	// 自动化中心：每分钟轮询到期任务并执行，每小时按设置清理过期运行日志。
+	automationRunner := automation.NewRunner(pool, notifyMgr)
+	apiServer.SetAutomationRunner(automationRunner)
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			due, err := db.ListDueAutomationTasks(time.Now())
+			if err != nil {
+				logger.Warn("查询到期自动化任务失败", "err", err)
+				continue
+			}
+			for _, task := range due {
+				task := task
+				go automationRunner.RunTask(context.Background(), task, db.AutomationTriggerSourceSchedule)
+			}
+		}
+	}()
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := db.RunAutomationLogRetentionOnce(); err != nil {
+				logger.Warn("自动化运行日志自动清理失败", "err", err)
+			}
+		}
+	}()
 
 	syncProxyConfigs := func(reason, deviceID string) {
 		if err := apiServer.SyncProxyConfigs(); err != nil {

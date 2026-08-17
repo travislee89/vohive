@@ -2445,87 +2445,25 @@ func (s *Server) handleDeviceMgmtSetFlightMode(c *gin.Context) {
 	})
 }
 
-// shouldUseATFirstReboot 判断重启时是否应优先尝试 AT+CFUN=1,1。
-// QMI 模式设备直接走 QMI ModeReset（backend.Reboot）；AT 优先路径仅保留给 AT 模式设备，
-// 原先"QMI 模式也优先走 AT"是为了规避部分模组 QMI ModeReset 假死的历史问题，
-// 现已实测确认本机型号 QMI ModeReset 正常工作，因此 QMI 模式不再绕道 AT。
-func shouldUseATFirstReboot(backendMode string) bool {
-	return backendMode != backend.BackendQMI
-}
-
-// handleDeviceMgmtReboot 执行模组重启 (QMI 模式走 QMI ModeReset，AT 模式走 AT+CFUN=1,1)
+// handleDeviceMgmtReboot 执行模组重启 (QMI 模式走 QMI ModeReset，AT 模式走 AT+CFUN=1,1)。
+// 实际重启逻辑在 device.Pool.RebootWorkerAction 中，自动化中心的定时重启任务复用同一路径。
 func (s *Server) handleDeviceMgmtReboot(c *gin.Context) {
 	id := deviceIDParam(c)
 
-	worker := s.pool.GetWorker(id)
-	if worker == nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "设备未找到"})
-		return
-	}
-
-	if err := validateRebootWorkerIdentity(c.Request.Context(), worker); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": err.Error()})
-		return
-	}
-
-	rebootSent := false
-
-	useATFirst := worker.Backend == nil || shouldUseATFirstReboot(worker.Backend.Mode())
-
-	// AT 模式设备优先尝试使用 AT 端口软重启；QMI 模式设备直接走 QMI ModeReset（见下方 fallback）
-	if useATFirst && worker.Modem != nil && worker.Modem.HasATPort() && worker.Modem.CanExecuteAT() {
-		_, err := worker.Modem.ExecuteAT("AT+CFUN=1,1", 20*time.Second)
-		if err == nil {
-			rebootSent = true
-		} else {
-			// 如果发送后立刻断开，可能会报错，视同成功发送
-			msg := strings.ToLower(err.Error())
-			if strings.Contains(msg, "timeout") || strings.Contains(msg, "eof") || strings.Contains(msg, "closed") || strings.Contains(msg, "no such file") {
-				rebootSent = true
-			}
+	if err := s.pool.RebootWorkerAction(c.Request.Context(), id); err != nil {
+		switch {
+		case errors.Is(err, device.ErrWorkerNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "设备未找到"})
+		case errors.Is(err, device.ErrIdentityConflict):
+			c.JSON(http.StatusConflict, gin.H{"status": "error", "message": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
 		}
-	}
-
-	// QMI 模式设备的主路径；AT 模式设备在 AT 端口不可用/发送失败时的降级路径
-	if !rebootSent && worker.Backend != nil {
-		if err := worker.Backend.Reboot(c.Request.Context()); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "重启指令失败: " + err.Error()})
-			return
-		}
-		rebootSent = true
-	}
-
-	if !rebootSent {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "无法发送重启指令，无可用通道"})
 		return
 	}
-
-	s.pool.MarkLifecycleRecovery(id, device.LifecyclePhaseRebooting, "manual_reboot", 3*time.Minute)
-	s.pool.ScheduleModemRebootRecovery(id, "manual_reboot")
 
 	// 因为重启后设备会脱网并暂时下线，前端仅需知道命令已送达
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "response": "重启指令已发送"})
-}
-
-func validateRebootWorkerIdentity(ctx context.Context, worker *device.Worker) error {
-	if worker == nil || worker.Backend == nil {
-		return nil
-	}
-	expectedIMEI := strings.TrimSpace(worker.Config.ModemIMEI)
-	if expectedIMEI == "" {
-		return nil
-	}
-	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	currentIMEI, err := worker.Backend.GetIMEI(probeCtx)
-	if err != nil || strings.TrimSpace(currentIMEI) == "" {
-		return nil
-	}
-	currentIMEI = strings.TrimSpace(currentIMEI)
-	if !config.IMEIMatches(currentIMEI, expectedIMEI) {
-		return fmt.Errorf("设备路径已漂移：当前控制面 IMEI=%s，不匹配配置 IMEI=%s，请先重新扫描/重新绑定后再重启", currentIMEI, expectedIMEI)
-	}
-	return nil
 }
 
 // handleDeviceMgmtReconnectVoWiFi 执行重连 VoWiFi 的操作

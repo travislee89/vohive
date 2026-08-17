@@ -92,7 +92,7 @@ func TestEvaluateSMSRulesFirstMatchWins(t *testing.T) {
 		Timestamp: time.Now(),
 		SMS:       &SMSContext{Content: "您的验证码是 123456"},
 	}
-	rule, err := evaluateSMSRules(ctx)
+	rule, err := evaluateRules("sms", ctx)
 	if err != nil {
 		t.Fatalf("evaluateSMSRules() error=%v", err)
 	}
@@ -105,7 +105,7 @@ func TestEvaluateSMSRulesFirstMatchWins(t *testing.T) {
 	if _, err := db.UpsertNotifyRule(specific); err != nil {
 		t.Fatalf("disable specific rule: %v", err)
 	}
-	rule, err = evaluateSMSRules(ctx)
+	rule, err = evaluateRules("sms", ctx)
 	if err != nil {
 		t.Fatalf("evaluateSMSRules() error=%v", err)
 	}
@@ -135,7 +135,7 @@ func TestEvaluateSMSRulesNoMatch(t *testing.T) {
 		Text:  "收到新短信",
 		SMS:   &SMSContext{Content: "您的验证码是 123456"},
 	}
-	got, err := evaluateSMSRules(ctx)
+	got, err := evaluateRules("sms", ctx)
 	if err != nil {
 		t.Fatalf("evaluateSMSRules() error=%v", err)
 	}

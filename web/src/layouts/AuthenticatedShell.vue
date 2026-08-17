@@ -17,7 +17,8 @@ import {
   Call24Regular,
   Globe24Regular,
   DocumentText24Regular,
-  Alert24Regular
+  Alert24Regular,
+  ArrowSync24Regular
 } from '@vicons/fluent'
 
 defineProps({
@@ -54,10 +55,11 @@ const menuGroups = [
     ]
   },
   {
-    title: '网络与通知',
+    title: '自动化与通知',
     items: [
       { index: '/proxy', label: '代理管理', icon: Globe24Regular },
-      { index: '/notify', label: '通知中心', icon: Alert24Regular }
+      { index: '/notify', label: '通知中心', icon: Alert24Regular },
+      { index: '/automation', label: '自动化中心', icon: ArrowSync24Regular }
     ]
   },
   {

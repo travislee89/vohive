@@ -11,8 +11,9 @@ const props = withDefaults(
     placeholder?: string
     type?: 'text' | 'textarea'
     rows?: number
+    resize?: 'none' | 'both' | 'horizontal' | 'vertical'
   }>(),
-  { type: 'text', rows: 3, placeholder: '' }
+  { type: 'text', rows: 3, placeholder: '', resize: 'vertical' }
 )
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -46,7 +47,7 @@ function insertVariable(key: string) {
 </script>
 
 <template>
-  <div class="space-y-2">
+  <div class="space-y-2 w-full">
     <div class="flex flex-wrap gap-1.5">
       <el-tag
         v-for="v in variables"
@@ -66,6 +67,7 @@ function insertVariable(key: string) {
       :model-value="modelValue"
       :type="type"
       :rows="type === 'textarea' ? rows : undefined"
+      :resize="type === 'textarea' ? resize : undefined"
       :placeholder="placeholder"
       @update:model-value="(val: string) => emit('update:modelValue', val)"
     />

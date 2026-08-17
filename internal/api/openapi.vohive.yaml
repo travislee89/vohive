@@ -36,6 +36,8 @@ tags:
     description: 日志历史与实时流
   - name: notify
     description: 通知中心：转发规则与转发日志
+  - name: automation
+    description: 自动化中心：定时/间隔任务（重启基带、发送短信）与运行日志
 paths:
   /docs:
     get:
@@ -1844,6 +1846,262 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /automation/tasks:
+    get:
+      tags: [automation]
+      summary: 列出自动化任务
+      responses:
+        '200':
+          description: 任务列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AutomationTask'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [automation]
+      summary: 新建自动化任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationTaskRequest'
+      responses:
+        '200':
+          description: 已创建的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTask'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /automation/tasks/{id}:
+    put:
+      tags: [automation]
+      summary: 更新自动化任务（部分字段更新）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationTaskRequest'
+      responses:
+        '200':
+          description: 已更新的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTask'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '404':
+          $ref: '#/components/responses/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [automation]
+      summary: 启用/停用任务
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: 已更新的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTask'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '404':
+          $ref: '#/components/responses/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [automation]
+      summary: 删除自动化任务
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 删除成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /automation/tasks/{id}/run:
+    post:
+      tags: [automation]
+      summary: 立即执行一次任务（不影响下次定时/间隔排期）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 任务已开始执行（异步，结果记录在运行日志中）
+        '404':
+          $ref: '#/components/responses/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /automation/logs:
+    get:
+      tags: [automation]
+      summary: 分页查询自动化任务运行日志
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - in: query
+          name: action_type
+          schema:
+            type: string
+            enum: [reboot, sms]
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [success, failed]
+        - in: query
+          name: start
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: end
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 运行日志分页结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AutomationRunLog'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  page_size:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [automation]
+      summary: 高级清理（按条件手动删除运行日志）
+      parameters:
+        - in: query
+          name: action_type
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: before
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /automation/logs/retention:
+    get:
+      tags: [automation]
+      summary: 获取运行日志自动清理设置
+      responses:
+        '200':
+          description: 自动清理设置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyLogRetention'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      tags: [automation]
+      summary: 更新运行日志自动清理设置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotifyLogRetention'
+      responses:
+        '200':
+          description: 已更新的自动清理设置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyLogRetention'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -3574,3 +3832,127 @@ components:
           type: boolean
         retention_days:
           type: integer
+
+    AutomationTask:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+        action_type:
+          type: string
+          enum: [reboot, sms]
+        device_id:
+          type: string
+          description: 具体设备 id，或 "all" 表示全部设备
+        sms_phone:
+          type: string
+        sms_content:
+          type: string
+          description: 支持 {{时间}}/{{随机字符串}} 模板占位符
+        sms_delay_min_sec:
+          type: integer
+        sms_delay_max_sec:
+          type: integer
+        sms_retry_count:
+          type: integer
+        trigger_type:
+          type: string
+          enum: [fixed_schedule, interval]
+        fixed_times:
+          type: array
+          items:
+            type: string
+            example: "04:00"
+        weekdays:
+          type: array
+          items:
+            type: integer
+          description: 1=一...7=日；为空表示每天都触发
+        interval_value:
+          type: integer
+        interval_unit:
+          type: string
+          enum: [hours, days]
+        last_run_at:
+          type: string
+          format: date-time
+        next_run_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AutomationTaskRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+        action_type:
+          type: string
+          enum: [reboot, sms]
+        device_id:
+          type: string
+        sms_phone:
+          type: string
+        sms_content:
+          type: string
+        sms_delay_min_sec:
+          type: integer
+        sms_delay_max_sec:
+          type: integer
+        sms_retry_count:
+          type: integer
+        trigger_type:
+          type: string
+          enum: [fixed_schedule, interval]
+        fixed_times:
+          type: array
+          items:
+            type: string
+        weekdays:
+          type: array
+          items:
+            type: integer
+        interval_value:
+          type: integer
+        interval_unit:
+          type: string
+          enum: [hours, days]
+
+    AutomationRunLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        task_id:
+          type: string
+        task_name:
+          type: string
+        action_type:
+          type: string
+          enum: [reboot, sms]
+        device_id:
+          type: string
+        trigger_source:
+          type: string
+          enum: [schedule, manual]
+        status:
+          type: string
+          enum: [success, failed]
+        result_summary:
+          type: string
+        error_detail:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
