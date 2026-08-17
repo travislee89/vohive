@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -466,10 +465,10 @@ func (w *Worker) collectRuntimeStatus(ctx context.Context, reason string) modem.
 				status.LAC = ss.LAC
 				status.CellID = ss.CellID
 				if ss.MCC > 0 {
-					status.ServingMCC = strconv.FormatUint(uint64(ss.MCC), 10)
+					status.ServingMCC = fmt.Sprintf("%03d", ss.MCC)
 				}
 				if ss.MNC > 0 {
-					status.ServingMNC = strconv.FormatUint(uint64(ss.MNC), 10)
+					status.ServingMNC = fmt.Sprintf("%02d", ss.MNC)
 				}
 				mu.Unlock()
 			}
