@@ -184,7 +184,7 @@ container_hygiene() {
 		printf 'manual docker build job must depend on validate\n' >&2
 		return 1
 	fi
-	if ! git grep -nF 'image: ${VOHIVE_IMAGE:-ghcr.io/boa-z/vohive:latest}' -- "$compose" >/dev/null; then
+	if ! git grep -nF 'image: ${VOHIVE_IMAGE:-ghcr.io/travislee89/vohive:latest}' -- "$compose" >/dev/null; then
 		printf 'prebuilt compose file must default to the current GHCR image\n' >&2
 		return 1
 	fi

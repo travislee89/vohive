@@ -34,7 +34,7 @@ EOF
 ```yaml
 services:
   vohive:
-    image: ghcr.io/boa-z/vohive:latest
+    image: ghcr.io/travislee89/vohive:latest
     container_name: vohive
     restart: unless-stopped
     ports:
@@ -131,7 +131,7 @@ environment:
 
 ## 📖 文档
 
-完整文档请访问: [GitHub](https://github.com/boa-z/vohive)
+完整文档请访问: [GitHub](https://github.com/travislee89/vohive)
 
 ## 📝 License
 

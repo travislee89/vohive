@@ -3,12 +3,13 @@ package notify
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/boa-z/vohive/internal/config"
-	"github.com/boa-z/vohive/internal/db"
-	"github.com/boa-z/vohive/internal/device"
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/db"
+	"github.com/travislee89/vohive/internal/device"
+	"github.com/travislee89/vohive/pkg/logger"
 )
 
 // Manager 统一通知管理器
@@ -29,6 +30,7 @@ type NotificationContext struct {
 
 // SMSContext 携带短信通知的结构化字段，供转发规则做条件匹配与模板变量渲染。
 type SMSContext struct {
+	ID         uint   // 对应的 db.SMS 行 ID；0 表示调用方无法关联到具体的落库记录
 	Sender     string // 发送方号码
 	Content    string // 短信内容
 	Source     string // 蜂窝 | VoWiFi
@@ -265,10 +267,20 @@ func (m *Manager) UpdateConfig(cfg *config.Config) error {
 
 // NotifySMS 实现 device.Notifier 接口 — 收到短信通知
 func (m *Manager) NotifySMS(deviceID, sender, content string, timestamp time.Time) {
-	m.NotifySMSWithSource(deviceID, sender, content, "蜂窝", timestamp)
+	m.notifySMS(0, deviceID, sender, content, "蜂窝", timestamp)
 }
 
 func (m *Manager) NotifySMSWithSource(deviceID, sender, content, source string, timestamp time.Time) {
+	m.notifySMS(0, deviceID, sender, content, source, timestamp)
+}
+
+// NotifySMSWithID 实现 device.SMSIDNotifier 接口 — 收到短信通知，且调用方已知对应的
+// db.SMS 行 ID，转发结果（成功/失败/部分成功）会回写到该行，供短信中心展示转发状态。
+func (m *Manager) NotifySMSWithID(smsID uint, deviceID, sender, content, source string, timestamp time.Time) {
+	m.notifySMS(smsID, deviceID, sender, content, source, timestamp)
+}
+
+func (m *Manager) notifySMS(smsID uint, deviceID, sender, content, source string, timestamp time.Time) {
 	source = strings.TrimSpace(source)
 	if source == "" {
 		source = "蜂窝"
@@ -291,6 +303,7 @@ func (m *Manager) NotifySMSWithSource(deviceID, sender, content, source string, 
 		DeviceName: m.resolveDeviceName(deviceID),
 		Timestamp:  timestamp,
 		SMS: &SMSContext{
+			ID:         smsID,
 			Sender:     sender,
 			Content:    content,
 			Source:     source,
@@ -426,6 +439,12 @@ func (m *Manager) channelsByName() map[string]Channel {
 // broadcastSMSWithRules 用转发规则引擎处理 SMS 通知：匹配到规则则渲染模板并按规则指定的渠道发送，
 // 每次渠道发送尝试都写一条转发日志；未匹配到任何规则则不转发，写一条 status=unmatched 的日志。
 func (m *Manager) broadcastSMSWithRules(ctx NotificationContext) {
+	var smsIDPtr *uint
+	if ctx.SMS != nil && ctx.SMS.ID != 0 {
+		id := ctx.SMS.ID
+		smsIDPtr = &id
+	}
+
 	rule, err := evaluateSMSRules(ctx)
 	if err != nil {
 		logger.Warn("转发规则匹配失败", "event", ctx.Event, "err", err)
@@ -436,10 +455,12 @@ func (m *Manager) broadcastSMSWithRules(ctx NotificationContext) {
 			Status:         db.NotifyLogStatusUnmatched,
 			ContentSummary: db.SummarizeNotifyLogContent(ctx.Text),
 			DeviceID:       ctx.DeviceID,
+			SMSID:          smsIDPtr,
 			Timestamp:      ctx.Timestamp,
 		}); err != nil {
 			logger.Warn("写入转发日志失败", "err", err)
 		}
+		// 未命中规则 = 未转发，sms 行的 ForwardStatus 默认值 0 语义已经正确，无需回写。
 		return
 	}
 
@@ -463,12 +484,23 @@ func (m *Manager) broadcastSMSWithRules(ctx NotificationContext) {
 	byName := m.channelsByName()
 	ruleID := rule.ID
 	ruleName := rule.Name
+
+	// wg/resultMu 用于在所有目标渠道各自异步发送完成后，聚合出一个整体转发状态回写到 sms 行；
+	// 不影响每个渠道各自的发送逻辑和各自的 NotifyLog 写入，聚合本身也在独立 goroutine 里等待，
+	// 不会阻塞 broadcastSMSWithRules 的 fire-and-forget 语义。
+	var wg sync.WaitGroup
+	var resultMu sync.Mutex
+	var attemptedChannels []string
+	var successCount, failCount int
+
 	for _, target := range rule.Channels() {
 		ch, ok := byName[target]
 		if !ok {
 			continue // 规则目标渠道当前未启用/不存在，静默跳过
 		}
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			var sendErr error
 			switch {
 			case rule.BodyMode == SendBodyModeCustomJSON && target == "webhook":
@@ -503,9 +535,44 @@ func (m *Manager) broadcastSMSWithRules(ctx NotificationContext) {
 				Channel:         target,
 				ErrorDetail:     errDetail,
 				DeviceID:        ctx.DeviceID,
+				SMSID:           smsIDPtr,
 				Timestamp:       ctx.Timestamp,
 			}); err != nil {
 				logger.Warn("写入转发日志失败", "err", err)
+			}
+
+			resultMu.Lock()
+			attemptedChannels = append(attemptedChannels, target)
+			if sendErr != nil {
+				failCount++
+			} else {
+				successCount++
+			}
+			resultMu.Unlock()
+		}()
+	}
+
+	if smsIDPtr != nil {
+		smsID := *smsIDPtr
+		go func() {
+			wg.Wait()
+			resultMu.Lock()
+			channels := append([]string(nil), attemptedChannels...)
+			sc, fc := successCount, failCount
+			resultMu.Unlock()
+			if len(channels) == 0 {
+				// 规则命中但目标渠道均不可用，视为未实际转发，保留 sms 行的默认"未转发"状态。
+				return
+			}
+			status := db.SMSForwardStatusSuccess
+			switch {
+			case fc > 0 && sc > 0:
+				status = db.SMSForwardStatusPartial
+			case fc > 0 && sc == 0:
+				status = db.SMSForwardStatusFailed
+			}
+			if err := db.UpdateSMSForwardStatus(smsID, status, channels, ruleName); err != nil {
+				logger.Warn("更新短信转发状态失败", "sms_id", smsID, "err", err)
 			}
 		}()
 	}

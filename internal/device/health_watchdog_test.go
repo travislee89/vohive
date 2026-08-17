@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boa-z/vohive/internal/backend"
-	"github.com/boa-z/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/backend"
+	"github.com/travislee89/vohive/internal/config"
 )
 
 func TestHealthCheckSnapshotsWorkersBeforeQMIProbe(t *testing.T) {

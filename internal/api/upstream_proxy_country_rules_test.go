@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boa-z/vohive/internal/db"
-	"github.com/boa-z/vohive/internal/upstreamproxy"
+	"github.com/travislee89/vohive/internal/db"
+	"github.com/travislee89/vohive/internal/upstreamproxy"
 	"github.com/gin-gonic/gin"
 )
 

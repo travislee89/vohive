@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/boa-z/vohive/internal/modem"
+	"github.com/travislee89/vohive/internal/modem"
 )
 
 type USSDResult struct {

@@ -3,7 +3,7 @@ package smsutil
 import (
 	"time"
 
-	"github.com/boa-z/vohive/pkg/smscodec"
+	"github.com/travislee89/vohive/pkg/smscodec"
 	"github.com/warthog618/sms/encoding/tpdu"
 )
 

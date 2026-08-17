@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boa-z/vohive/internal/backend"
-	"github.com/boa-z/vohive/internal/cardpolicy"
-	"github.com/boa-z/vohive/internal/config"
-	"github.com/boa-z/vohive/internal/vowifihost"
+	"github.com/travislee89/vohive/internal/backend"
+	"github.com/travislee89/vohive/internal/cardpolicy"
+	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/vowifihost"
 )
 
 func TestApplyPolicyProjectsFields(t *testing.T) {

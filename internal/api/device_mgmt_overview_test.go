@@ -3,8 +3,8 @@ package api
 import (
 	"testing"
 
-	"github.com/boa-z/vohive/internal/config"
-	"github.com/boa-z/vohive/internal/modem"
+	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/modem"
 )
 
 // 零路径持久化后,持久化 config 不再含 control_device/interface 等路径;

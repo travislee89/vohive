@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/boa-z/quectel-qmi-go/pkg/qmi"
+	"github.com/travislee89/quectel-qmi-go/pkg/qmi"
 )
 
 type qmiWDSPacketStatisticsReader interface {

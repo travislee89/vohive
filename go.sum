@@ -1,9 +1,5 @@
 aead.dev/minisign v0.2.0 h1:kAWrq/hBRu4AARY6AlciO83xhNnW9UaC8YipS2uhLPk=
 aead.dev/minisign v0.2.0/go.mod h1:zdq6LdSd9TbuSxchxwhpA9zEb9YXcVGoE8JakuiGaIQ=
-github.com/boa-z/quectel-qmi-go v0.0.0-20260707171930-eb8aaeb9c404 h1:f4tDAAfFvG/6ia5HuhV562dZlqNsGic00SCt26ipWnI=
-github.com/boa-z/quectel-qmi-go v0.0.0-20260707171930-eb8aaeb9c404/go.mod h1:uUTxDgqoRDy4Wt4FACPzoG1AKUWU+7sdk+Jg2MYjpMA=
-github.com/boa-z/vowifi-go v0.0.0-20260709161034-1e9c6e6adbfc h1:5U82JscM9wKBoJKIeuxuAz12HKwuVE9DI74c+lq9tNo=
-github.com/boa-z/vowifi-go v0.0.0-20260709161034-1e9c6e6adbfc/go.mod h1:idvGWFg/NN3Pc0qjvMWMdbxeMEbRTBFXsTT+WiPyyDA=
 github.com/bytedance/sonic v1.14.0 h1:/OfKt8HFw0kh2rj8N0F6C/qPGRESq0BbaNZgcNXXzQQ=
 github.com/bytedance/sonic v1.14.0/go.mod h1:WoEbx8WTcFJfzCe0hbmyTGrfjt8PzNEBdxlNUO24NhA=
 github.com/bytedance/sonic/loader v0.3.0 h1:dskwH8edlzNMctoruo8FPTJDF3vLtDT0sXZwvZJyqeA=
@@ -170,6 +166,10 @@ github.com/subosito/gotenv v1.6.0 h1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8
 github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSWPKKo0FU=
 github.com/things-go/go-socks5 v0.1.1 h1:48hy9cHEXPKeG91G/g4n8zW4uynzPUQy/FkcrJ7r5AY=
 github.com/things-go/go-socks5 v0.1.1/go.mod h1:1YBHVYG7Oli5ae+Pwkp630cPAwY1pjUPmohO1n0Emg0=
+github.com/travislee89/quectel-qmi-go v0.0.0-20260817042816-174e679fc66a h1:wBJRuPIS/s1R1Q3PH+v1p6DzvbZFrqy+l6V7QAqr1dQ=
+github.com/travislee89/quectel-qmi-go v0.0.0-20260817042816-174e679fc66a/go.mod h1:qe2O0N6oUFzMlpk6W4erxEfdNoOyK3Afk2DPcTMsr6U=
+github.com/travislee89/vowifi-go v0.0.0-20260817042821-1533f386724e h1:/ZljGKigEWsRnZWlbFokE8g1QW7/tc4Jn02GPYKu+2Y=
+github.com/travislee89/vowifi-go v0.0.0-20260817042821-1533f386724e/go.mod h1:DuM5nUuiQbX8ztZUpmiW+zknVqgOXAhQa5xH3ovmU0Y=
 github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS4MhqMhdFk5YI=
 github.com/twitchyliquid64/golang-asm v0.15.1/go.mod h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=
 github.com/ugorji/go/codec v1.3.0 h1:Qd2W2sQawAfG8XSvzwhBeoGq71zXOC/Q1E9y/wUcsUA=

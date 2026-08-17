@@ -50,6 +50,10 @@ export const useSMSStore = defineStore('sms', () => {
     return smsService.deleteThread(payload)
   }
 
+  async function getForwardLog(smsId: number) {
+    return smsService.getForwardLog(smsId)
+  }
+
   return {
     devices,
     threads,
@@ -62,6 +66,7 @@ export const useSMSStore = defineStore('sms', () => {
     fetchThread,
     send,
     deleteMessage,
-    deleteThread
+    deleteThread,
+    getForwardLog
   }
 })

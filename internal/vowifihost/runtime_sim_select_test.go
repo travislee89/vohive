@@ -3,8 +3,8 @@ package vowifihost
 import (
 	"testing"
 
-	swusim "github.com/boa-z/vowifi-go/engine/sim"
-	"github.com/boa-z/vowifi-go/runtimehost"
+	swusim "github.com/travislee89/vowifi-go/engine/sim"
+	"github.com/travislee89/vowifi-go/runtimehost"
 )
 
 var _ swusim.AKAProvider = missingSIMProvider{}

@@ -2,6 +2,7 @@ import { api } from '../stores/auth'
 import { callService } from './http'
 import type { ServiceResult } from '../types/domain'
 import type { DeviceMgmtListItem } from '../types/api'
+import type { NotifyLog } from '../types/notify'
 import type { SMSContactDTO, SMSMessageDTO, SmsThreadVM } from '../types/view-model'
 
 export type SmsThreadQueryParams = {
@@ -108,6 +109,12 @@ export const smsService = {
       if (payload.imsi) params.imsi = payload.imsi
       const res = await api.delete('/sms/thread', { params })
       return res.data as { deleted: number; imsi: string; peer: string }
+    })
+  },
+  getForwardLog(smsId: number) {
+    return reuseInflight(`sms:getForwardLog:${smsId}`, async () => {
+      const res = await api.get(`/sms/messages/${smsId}/forward-log`)
+      return (res.data || []) as NotifyLog[]
     })
   }
 }

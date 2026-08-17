@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/boa-z/vohive/internal/backend"
-	"github.com/boa-z/vohive/internal/modem"
+	"github.com/travislee89/vohive/internal/backend"
+	"github.com/travislee89/vohive/internal/modem"
 )
 
 func newWorkerBackendStrict(deviceID, backendMode, controlDevice string, m *modem.Manager, source backend.QMISource, mbimSource backend.MBIMSource) (backend.DeviceBackend, error) {

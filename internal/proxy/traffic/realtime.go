@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/boa-z/vohive/internal/device"
+	"github.com/travislee89/vohive/internal/device"
 )
 
 const (

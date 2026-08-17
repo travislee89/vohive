@@ -100,7 +100,7 @@ func TestSaveSMSPopulatesICCID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := SaveSMS("IMSI_SAVE", "+10086", "", "hello", 1, 0, time.Now()); err != nil {
+	if _, err := SaveSMS("IMSI_SAVE", "+10086", "", "hello", 1, 0, time.Now()); err != nil {
 		t.Fatalf("SaveSMS error=%v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestSaveSMSPopulatesICCID(t *testing.T) {
 // 无 sim_cards 映射时回退 "imsi:" 前缀合成键，与 P4 回填约定一致。
 func TestSaveSMSOrphanICCIDFallback(t *testing.T) {
 	openTestDB(t)
-	if err := SaveSMS("IMSI_NOMAP", "+10086", "", "hi", 1, 0, time.Now()); err != nil {
+	if _, err := SaveSMS("IMSI_NOMAP", "+10086", "", "hi", 1, 0, time.Now()); err != nil {
 		t.Fatalf("SaveSMS error=%v", err)
 	}
 	list, err := GetSMSByICCID("imsi:IMSI_NOMAP", 10)

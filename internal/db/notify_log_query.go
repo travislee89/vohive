@@ -58,6 +58,20 @@ func ListNotifyLogs(page, pageSize int, messageType, status, keyword string, sta
 	return out, total, nil
 }
 
+// ListNotifyLogsBySMSID 返回某条短信的全部转发尝试记录（用于前端"查看详情"）。
+func ListNotifyLogsBySMSID(smsID uint) ([]NotifyLog, error) {
+	if DB == nil || smsID == 0 {
+		return nil, nil
+	}
+	var out []NotifyLog
+	if err := DB.Where("sms_id = ?", smsID).
+		Order("timestamp desc, id desc").
+		Find(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DeleteNotifyLogsBefore 删除指定时间之前的所有转发日志（自动清理用）。
 func DeleteNotifyLogsBefore(cutoff time.Time) error {
 	if DB == nil {

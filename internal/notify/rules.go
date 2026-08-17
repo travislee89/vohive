@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/boa-z/vohive/internal/db"
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/internal/db"
+	"github.com/travislee89/vohive/pkg/logger"
 )
 
 // 匹配方式枚举，对应前端「匹配方式」下拉框。

@@ -8,16 +8,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boa-z/vohive/internal/backend"
-	"github.com/boa-z/vohive/internal/db"
-	"github.com/boa-z/vohive/internal/modem"
-	qmicore "github.com/boa-z/vohive/internal/qmi"
-	"github.com/boa-z/vohive/internal/smsnotify"
-	"github.com/boa-z/vohive/pkg/logger"
-	"github.com/boa-z/vohive/pkg/smscodec"
+	"github.com/travislee89/vohive/internal/backend"
+	"github.com/travislee89/vohive/internal/db"
+	"github.com/travislee89/vohive/internal/modem"
+	qmicore "github.com/travislee89/vohive/internal/qmi"
+	"github.com/travislee89/vohive/internal/smsnotify"
+	"github.com/travislee89/vohive/pkg/logger"
+	"github.com/travislee89/vohive/pkg/smscodec"
 
-	qmimanager "github.com/boa-z/quectel-qmi-go/pkg/manager"
-	"github.com/boa-z/quectel-qmi-go/pkg/qmi"
+	qmimanager "github.com/travislee89/quectel-qmi-go/pkg/manager"
+	"github.com/travislee89/quectel-qmi-go/pkg/qmi"
 )
 
 func (w *Worker) smsQMICore() qmiSMSCore {
@@ -437,13 +437,21 @@ func (w *Worker) processSMS(sender, content string, timestamp time.Time) {
 			imsi = w.Modem.GetIMSI()
 		}
 	}
+	var smsID uint
 	if imsi != "" {
-		if err := db.SaveSMS(imsi, sender, "", content, 1, 0, timestamp); err != nil {
+		saved, err := db.SaveSMS(imsi, sender, "", content, 1, 0, timestamp)
+		if err != nil {
 			logger.Warn(fmt.Sprintf("[%s] 保存短信到数据库失败", w.ID), "err", err)
+		} else if saved != nil {
+			smsID = saved.ID
 		}
 	}
 
 	if notifier := w.Pool.getNotifier(); notifier != nil {
-		notifier.NotifySMS(w.ID, sender, content, timestamp)
+		if withID, ok := notifier.(SMSIDNotifier); ok && smsID != 0 {
+			withID.NotifySMSWithID(smsID, w.ID, sender, content, "蜂窝", timestamp)
+		} else {
+			notifier.NotifySMS(w.ID, sender, content, timestamp)
+		}
 	}
 }

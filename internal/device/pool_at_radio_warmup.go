@@ -3,8 +3,8 @@ package device
 import (
 	"time"
 
-	"github.com/boa-z/vohive/internal/backend"
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/internal/backend"
+	"github.com/travislee89/vohive/pkg/logger"
 )
 
 var atRadioWarmupDelays = []time.Duration{0, time.Second, 3 * time.Second, 8 * time.Second}

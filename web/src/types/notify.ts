@@ -53,6 +53,7 @@ export type NotifyLog = {
   channel?: string
   error_detail?: string
   device_id?: string
+  sms_id?: number
   timestamp: string
 }
 

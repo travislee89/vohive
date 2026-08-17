@@ -7,9 +7,9 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/boa-z/vohive/internal/config"
-	"github.com/boa-z/vohive/internal/updater"
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/updater"
+	"github.com/travislee89/vohive/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
 

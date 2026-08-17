@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boa-z/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/config"
 )
 
 func TestClientOptionsFromDeviceConfigKeepsRuntimeDefaultsAndProxy(t *testing.T) {

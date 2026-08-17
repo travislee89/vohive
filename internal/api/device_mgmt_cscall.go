@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/boa-z/vohive/internal/cscall"
+	"github.com/travislee89/vohive/internal/cscall"
 	"github.com/gin-gonic/gin"
 )
 

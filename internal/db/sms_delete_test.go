@@ -20,10 +20,10 @@ func TestDeleteSMSByIDRebuildsContact(t *testing.T) {
 	initSMSDeleteTestDB(t)
 
 	base := time.Date(2026, 4, 14, 10, 0, 0, 0, time.UTC)
-	if err := SaveSMS("imsi-1", "+10086", "+86138", "first", 1, 0, base); err != nil {
+	if _, err := SaveSMS("imsi-1", "+10086", "+86138", "first", 1, 0, base); err != nil {
 		t.Fatalf("SaveSMS(first) error=%v", err)
 	}
-	if err := SaveSMS("imsi-1", "me", "+10086", "second", 2, 2, base.Add(time.Second)); err != nil {
+	if _, err := SaveSMS("imsi-1", "me", "+10086", "second", 2, 2, base.Add(time.Second)); err != nil {
 		t.Fatalf("SaveSMS(second) error=%v", err)
 	}
 
@@ -59,10 +59,10 @@ func TestDeleteSMSByIMSIAndPeerDeletesThreadAndContact(t *testing.T) {
 	initSMSDeleteTestDB(t)
 
 	base := time.Date(2026, 4, 14, 10, 0, 0, 0, time.UTC)
-	if err := SaveSMS("imsi-2", "+20086", "+86139", "one", 1, 0, base); err != nil {
+	if _, err := SaveSMS("imsi-2", "+20086", "+86139", "one", 1, 0, base); err != nil {
 		t.Fatalf("SaveSMS(one) error=%v", err)
 	}
-	if err := SaveSMS("imsi-2", "me", "+20086", "two", 2, 2, base.Add(time.Second)); err != nil {
+	if _, err := SaveSMS("imsi-2", "me", "+20086", "two", 2, 2, base.Add(time.Second)); err != nil {
 		t.Fatalf("SaveSMS(two) error=%v", err)
 	}
 

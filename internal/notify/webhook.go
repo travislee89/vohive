@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/boa-z/vohive/internal/config"
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/pkg/logger"
 )
 
 // webhookPayload 定义 Webhook 推送的 JSON 结构

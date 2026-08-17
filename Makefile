@@ -9,22 +9,23 @@ DIST_DIR ?= dist
 MAIN_PACKAGE ?= ./cmd/vohive
 CI ?= ./scripts/ci.sh
 
-LDFLAGS = -s -w -X 'github.com/boa-z/vohive/internal/global.Version=$(VERSION)' -X 'github.com/boa-z/vohive/internal/global.BuildTime=$(BUILD_TIME)'
+LDFLAGS = -s -w -X 'github.com/travislee89/vohive/internal/global.Version=$(VERSION)' -X 'github.com/travislee89/vohive/internal/global.BuildTime=$(BUILD_TIME)'
 GO_BUILD = go build -trimpath -buildvcs=false -tags "$(GO_TAGS)" -ldflags "$(LDFLAGS)"
 
 AMD64_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_amd64
 ARM64_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_arm64
 ARMV7_OUT = $(DIST_DIR)/$(BINARY_NAME)_$(VERSION_TAG)_linux_armv7
-# 压缩二进制：UPX 存在时启用，不存在时静默跳过（不影响编译）。
-# 由调用方显式禁用（如 CI 的 disable-upx-by-default）或设置 UPX= 可跳过。
+
+# Compress binary: enabled when UPX is present, silently skipped when absent (does not affect build).
+# Can be skipped by having the caller explicitly disable it (e.g. CI's disable-upx-by-default) or by setting UPX=.
 UPX ?= $(shell command -v upx || command -v upx-ucl)
 UPX_FLAGS ?= --best --lzma
 
-# compress-if-upx 当 UPX 可用时压缩目标二进制，否则静默跳过。
+# compress-if-upx compresses the target binary when UPX is available, otherwise silently skips.
 define compress-if-upx
 	@if [ -n "$(UPX)" ]; then \
-		echo "→ 压缩 $1 ($(UPX) $(UPX_FLAGS))"; \
-		$(UPX) $(UPX_FLAGS) "$1" || { echo "警告: UPX 压缩失败，保留未压缩二进制"; }; \
+		echo "→ Compressing $1 ($(UPX) $(UPX_FLAGS))"; \
+		$(UPX) $(UPX_FLAGS) "$1" || { echo "Warning: UPX compression failed, keeping uncompressed binary"; }; \
 	fi
 endef
 
@@ -64,3 +65,4 @@ build-armv7: frontend-dist
 clean:
 	go clean
 	rm -rf $(DIST_DIR)
+

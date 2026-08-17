@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boa-z/vohive/internal/config"
-	"github.com/boa-z/vohive/internal/notify"
+	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/notify"
 	"github.com/gin-gonic/gin"
 )
 

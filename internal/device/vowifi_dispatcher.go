@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/boa-z/vohive/internal/smsnotify"
-	"github.com/boa-z/vohive/pkg/logger"
-	"github.com/boa-z/vowifi-go/runtimehost/eventhost"
+	"github.com/travislee89/vohive/internal/smsnotify"
+	"github.com/travislee89/vohive/pkg/logger"
+	"github.com/travislee89/vowifi-go/runtimehost/eventhost"
 )
 
 type poolVoWiFiRuntimeDispatcher struct {
@@ -56,7 +56,9 @@ func (d poolVoWiFiRuntimeDispatcher) Dispatch(ctx context.Context, e eventhost.E
 			logger.Info("VoWiFi 短信重复（通过数据库去重兜底），不进行重复通知推送", "device", sms.DevID, "sender", sms.Sender)
 			return
 		}
-		if withSource, ok := notifier.(SMSSourceNotifier); ok {
+		if withID, ok := notifier.(SMSIDNotifier); ok && recordResult.SMSID != 0 {
+			withID.NotifySMSWithID(recordResult.SMSID, sms.DevID, sms.Sender, sms.Content, "VoWiFi", sms.Time)
+		} else if withSource, ok := notifier.(SMSSourceNotifier); ok {
 			withSource.NotifySMSWithSource(sms.DevID, sms.Sender, sms.Content, "VoWiFi", sms.Time)
 		} else {
 			notifier.NotifySMS(sms.DevID, sms.Sender, sms.Content, sms.Time)

@@ -17,10 +17,10 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/boa-z/vohive/internal/apduarbiter"
-	backendpkg "github.com/boa-z/vohive/internal/backend"
-	"github.com/boa-z/vohive/internal/modem"
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/internal/apduarbiter"
+	backendpkg "github.com/travislee89/vohive/internal/backend"
+	"github.com/travislee89/vohive/internal/modem"
+	"github.com/travislee89/vohive/pkg/logger"
 	"github.com/damonto/euicc-go/bertlv"
 	"github.com/damonto/euicc-go/driver"
 	"github.com/damonto/euicc-go/lpa"

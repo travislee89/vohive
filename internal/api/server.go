@@ -18,20 +18,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/boa-z/vohive/internal/config"
-	"github.com/boa-z/vohive/internal/data/repo"
-	"github.com/boa-z/vohive/internal/db"
-	"github.com/boa-z/vohive/internal/device"
-	"github.com/boa-z/vohive/internal/global"
-	"github.com/boa-z/vohive/internal/notify"
-	"github.com/boa-z/vohive/internal/proxy/server"
-	proxytraffic "github.com/boa-z/vohive/internal/proxy/traffic"
-	vwebsheet "github.com/boa-z/vohive/internal/websheet"
-	"github.com/boa-z/vohive/pkg/smscodec"
-	"github.com/boa-z/vowifi-go/runtimehost/messaging"
-	"github.com/boa-z/vowifi-go/runtimehost/voicehost"
+	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/data/repo"
+	"github.com/travislee89/vohive/internal/db"
+	"github.com/travislee89/vohive/internal/device"
+	"github.com/travislee89/vohive/internal/global"
+	"github.com/travislee89/vohive/internal/notify"
+	"github.com/travislee89/vohive/internal/proxy/server"
+	proxytraffic "github.com/travislee89/vohive/internal/proxy/traffic"
+	vwebsheet "github.com/travislee89/vohive/internal/websheet"
+	"github.com/travislee89/vohive/pkg/smscodec"
+	"github.com/travislee89/vowifi-go/runtimehost/messaging"
+	"github.com/travislee89/vowifi-go/runtimehost/voicehost"
 
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/pkg/logger"
 	"github.com/spf13/viper"
 
 	"github.com/gin-gonic/gin"
@@ -40,7 +40,8 @@ import (
 
 type SMSWithDevice struct {
 	db.SMS
-	DeviceName string `json:"device_name"`
+	DeviceName      string   `json:"device_name"`
+	ForwardChannels []string `json:"forward_channels,omitempty"`
 }
 
 type smsInboxIMSIReader interface {
@@ -247,8 +248,9 @@ func (s *Server) newRouter() *gin.Engine {
 		api.GET("/sms/delivery/:message_id", s.handleSMSDelivery) // 查询发送投递状态
 		api.GET("/sms/contacts", s.handleGetSMSContacts)          // 获取短信联系人列表
 		api.GET("/sms/thread", s.handleGetSMSThread)              // 获取与某联系人的短信会话
-		api.DELETE("/sms/messages/:id", s.handleDeleteSMSMessage) // 删除单条历史短信
-		api.DELETE("/sms/thread", s.handleDeleteSMSThread)        // 删除指定历史短信会话
+		api.DELETE("/sms/messages/:id", s.handleDeleteSMSMessage)          // 删除单条历史短信
+		api.DELETE("/sms/thread", s.handleDeleteSMSThread)                 // 删除指定历史短信会话
+		api.GET("/sms/messages/:id/forward-log", s.handleGetSMSForwardLog) // 查询单条短信的转发日志明细
 
 		// ===== 系统设置 =====
 		api.GET("/settings/notifications", s.handleGetNotificationSettings)    // 获取通知设置
@@ -1188,7 +1190,7 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 		if err := worker.SendSMSWithOptions(req.Phone, req.Message, sendOpts); err != nil {
 			// 发送失败，入库记录（status=3）
 			if imsi != "" {
-				_ = db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 3, time.Now())
+				_, _ = db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 3, time.Now())
 			}
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"status":  "error",
@@ -1200,7 +1202,7 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 		}
 		// 发送成功，入库记录（status=2）
 		if imsi != "" {
-			_ = db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 2, time.Now())
+			_, _ = db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 2, time.Now())
 		}
 	}
 
@@ -1826,8 +1828,9 @@ func (s *Server) handleGetSMSThread(c *gin.Context) {
 	enriched := make([]SMSWithDevice, 0, len(list))
 	for _, sms := range list {
 		enriched = append(enriched, SMSWithDevice{
-			SMS:        sms,
-			DeviceName: devName,
+			SMS:             sms,
+			DeviceName:      devName,
+			ForwardChannels: sms.ForwardChannelList(),
 		})
 	}
 

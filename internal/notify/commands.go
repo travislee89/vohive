@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boa-z/vohive/internal/db"
-	"github.com/boa-z/vohive/internal/device"
-	"github.com/boa-z/vowifi-go/runtimehost"
-	"github.com/boa-z/vowifi-go/runtimehost/messaging"
-	"github.com/boa-z/vowifi-go/runtimehost/voicehost"
+	"github.com/travislee89/vohive/internal/db"
+	"github.com/travislee89/vohive/internal/device"
+	"github.com/travislee89/vowifi-go/runtimehost"
+	"github.com/travislee89/vowifi-go/runtimehost/messaging"
+	"github.com/travislee89/vowifi-go/runtimehost/voicehost"
 )
 
 // ---------- 通用命令 handler（TG 和飞书共用） ----------
@@ -103,7 +103,7 @@ func (m *Manager) handleCmdSendSMS(cmdCtx CommandContext, args []string) string 
 				cmdCtx.Reply(fmt.Sprintf("发送短信 / 失败\n设备    %s\n号码    %s\n通道    蜂窝\n原因    %v", displayName, phone, sendErr))
 				return
 			}
-			_ = db.SaveSMS(worker.GetIMSI(), worker.ID, phone, message, 2, 2, time.Now())
+			_, _ = db.SaveSMS(worker.GetIMSI(), worker.ID, phone, message, 2, 2, time.Now())
 		}
 
 		channel := "蜂窝"
