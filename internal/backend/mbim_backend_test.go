@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	qmimanager "github.com/boa-z/quectel-qmi-go/pkg/manager"
-	"github.com/boa-z/vohive/pkg/mbim"
-	"github.com/boa-z/vohive/pkg/smscodec"
+	qmimanager "github.com/travislee89/quectel-qmi-go/pkg/manager"
+	"github.com/travislee89/vohive/pkg/mbim"
+	"github.com/travislee89/vohive/pkg/smscodec"
 	"github.com/warthog618/sms/encoding/tpdu"
 )
 

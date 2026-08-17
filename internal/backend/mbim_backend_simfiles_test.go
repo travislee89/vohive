@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boa-z/vohive/pkg/mbim"
+	"github.com/travislee89/vohive/pkg/mbim"
 )
 
 func mbimResetCapableForTest() *mbim.Capabilities {

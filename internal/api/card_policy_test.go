@@ -11,9 +11,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/boa-z/vohive/internal/config"
-	"github.com/boa-z/vohive/internal/db"
-	"github.com/boa-z/vohive/internal/device"
+	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/db"
+	"github.com/travislee89/vohive/internal/device"
 	"github.com/gin-gonic/gin"
 )
 

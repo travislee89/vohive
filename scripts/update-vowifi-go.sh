@@ -29,7 +29,7 @@ run() {
 }
 
 GO_BIN="$(find_go)"
-VOWIFI_MODULE="${VOWIFI_MODULE:-github.com/boa-z/vowifi-go}"
+VOWIFI_MODULE="${VOWIFI_MODULE:-github.com/travislee89/vowifi-go}"
 VOWIFI_VERSION="${VOWIFI_VERSION:-main}"
 
 printf 'Using Go: %s\n' "$("$GO_BIN" version)"

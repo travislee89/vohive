@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boa-z/vohive/internal/config"
-	"github.com/boa-z/vohive/internal/db"
-	"github.com/boa-z/vohive/internal/device"
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/db"
+	"github.com/travislee89/vohive/internal/device"
+	"github.com/travislee89/vohive/pkg/logger"
 )
 
 // Manager 统一通知管理器

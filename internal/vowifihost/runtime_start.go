@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	swusim "github.com/boa-z/vowifi-go/engine/sim"
-	"github.com/boa-z/vowifi-go/runtimehost"
-	"github.com/boa-z/vowifi-go/runtimehost/eventhost"
-	"github.com/boa-z/vowifi-go/runtimehost/messaging"
-	"github.com/boa-z/vowifi-go/runtimehost/voicehost"
+	swusim "github.com/travislee89/vowifi-go/engine/sim"
+	"github.com/travislee89/vowifi-go/runtimehost"
+	"github.com/travislee89/vowifi-go/runtimehost/eventhost"
+	"github.com/travislee89/vowifi-go/runtimehost/messaging"
+	"github.com/travislee89/vowifi-go/runtimehost/voicehost"
 )
 
 type runtimeStartFunc func(context.Context, runtimehost.StartRequest) (*runtimehost.Instance, error)

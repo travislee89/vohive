@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/pkg/logger"
 )
 
 type TeardownOptions struct {

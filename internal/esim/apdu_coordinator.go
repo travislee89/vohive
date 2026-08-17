@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/boa-z/vohive/internal/apduarbiter"
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/internal/apduarbiter"
+	"github.com/travislee89/vohive/pkg/logger"
 )
 
 type apduSessionInfo struct {

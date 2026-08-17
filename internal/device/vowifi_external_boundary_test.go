@@ -13,15 +13,15 @@ func TestVoWiFiHostImportsExternalRuntimehostOnly(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join("..", ".."))
 	scanRoots := []string{"cmd", "internal"}
 	allowedVoWiFiImports := map[string]bool{
-		"github.com/boa-z/vowifi-go/runtimehost":             true,
-		"github.com/boa-z/vowifi-go/runtimehost/carrier":     true,
-		"github.com/boa-z/vowifi-go/runtimehost/e911":        true,
-		"github.com/boa-z/vowifi-go/runtimehost/eventhost":   true,
-		"github.com/boa-z/vowifi-go/runtimehost/identity":    true,
-		"github.com/boa-z/vowifi-go/runtimehost/messaging":   true,
-		"github.com/boa-z/vowifi-go/runtimehost/simauth":     true,
-		"github.com/boa-z/vowifi-go/runtimehost/voiceclient": true,
-		"github.com/boa-z/vowifi-go/runtimehost/voicehost":   true,
+		"github.com/travislee89/vowifi-go/runtimehost":             true,
+		"github.com/travislee89/vowifi-go/runtimehost/carrier":     true,
+		"github.com/travislee89/vowifi-go/runtimehost/e911":        true,
+		"github.com/travislee89/vowifi-go/runtimehost/eventhost":   true,
+		"github.com/travislee89/vowifi-go/runtimehost/identity":    true,
+		"github.com/travislee89/vowifi-go/runtimehost/messaging":   true,
+		"github.com/travislee89/vowifi-go/runtimehost/simauth":     true,
+		"github.com/travislee89/vowifi-go/runtimehost/voiceclient": true,
+		"github.com/travislee89/vowifi-go/runtimehost/voicehost":   true,
 	}
 	var offenders []string
 	fset := token.NewFileSet()
@@ -45,14 +45,14 @@ func TestVoWiFiHostImportsExternalRuntimehostOnly(t *testing.T) {
 			rel, _ := filepath.Rel(repoRoot, path)
 			for _, spec := range file.Imports {
 				importPath := strings.Trim(spec.Path.Value, `"`)
-				if strings.HasPrefix(importPath, "github.com/boa-z/"+"vowifi-go/engine/") {
+				if strings.HasPrefix(importPath, "github.com/travislee89/"+"vowifi-go/engine/") {
 					continue
 				}
-				if strings.HasPrefix(importPath, "github.com/boa-z/"+"vowifi-go/") && !allowedVoWiFiImports[importPath] {
+				if strings.HasPrefix(importPath, "github.com/travislee89/"+"vowifi-go/") && !allowedVoWiFiImports[importPath] {
 					offenders = append(offenders, rel+": imports non-public VoWiFi package "+importPath)
 				}
-				if importPath == "github.com/boa-z/"+"vohive/internal/vowifi" ||
-					strings.HasPrefix(importPath, "github.com/boa-z/"+"vohive/internal/vowifi/") {
+				if importPath == "github.com/travislee89/"+"vohive/internal/vowifi" ||
+					strings.HasPrefix(importPath, "github.com/travislee89/"+"vohive/internal/vowifi/") {
 					offenders = append(offenders, rel+": imports old internal VoWiFi")
 				}
 			}

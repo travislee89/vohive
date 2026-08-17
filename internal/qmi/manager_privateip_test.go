@@ -4,7 +4,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/boa-z/quectel-qmi-go/pkg/qmi"
+	"github.com/travislee89/quectel-qmi-go/pkg/qmi"
 )
 
 func TestQmiSettingsIPv6(t *testing.T) {

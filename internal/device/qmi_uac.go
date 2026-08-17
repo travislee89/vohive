@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boa-z/vohive/internal/config"
-	"github.com/boa-z/vohive/internal/modem"
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/modem"
+	"github.com/travislee89/vohive/pkg/logger"
 )
 
 // enableQuectelUACAndReboot 在独立 goroutine 中尝试通过一次性 AT 会话开启 Quectel 模组的

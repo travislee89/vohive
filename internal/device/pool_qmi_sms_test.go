@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	qmimanager "github.com/boa-z/quectel-qmi-go/pkg/manager"
-	"github.com/boa-z/quectel-qmi-go/pkg/qmi"
-	qmicore "github.com/boa-z/vohive/internal/qmi"
-	"github.com/boa-z/vohive/pkg/smscodec"
+	qmimanager "github.com/travislee89/quectel-qmi-go/pkg/manager"
+	"github.com/travislee89/quectel-qmi-go/pkg/qmi"
+	qmicore "github.com/travislee89/vohive/internal/qmi"
+	"github.com/travislee89/vohive/pkg/smscodec"
 )
 
 type qmiSMSCoreStub struct {

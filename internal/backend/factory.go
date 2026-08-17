@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/boa-z/vohive/internal/modem"
-	"github.com/boa-z/vohive/pkg/logger"
+	"github.com/travislee89/vohive/internal/modem"
+	"github.com/travislee89/vohive/pkg/logger"
 )
 
 // 后端模式常量
