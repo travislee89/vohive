@@ -115,7 +115,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto">
+  <div class="max-w-7xl mx-auto">
     <PageHeader title="系统设置" subtitle="管理网关参数与运行信息" />
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">

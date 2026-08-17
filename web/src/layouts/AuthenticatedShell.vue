@@ -38,15 +38,35 @@ const drawerOpen = ref(false)
 const debugOpen = ref(false)
 const DebugPanel = defineAsyncComponent(() => import('../components/DebugPanel.vue'))
 
-const menuItems = [
-  { index: '/', label: '仪表盘', icon: Board24Regular },
-  { index: '/devices', label: '设备管理', icon: Phone24Regular },
-  { index: '/sms', label: '短信中心', icon: Mail24Regular },
-  { index: '/calls', label: '来电查询', icon: Call24Regular },
-  { index: '/notify', label: '通知中心', icon: Alert24Regular },
-  { index: '/proxy', label: '代理管理', icon: Globe24Regular },
-  { index: '/logs', label: '实时日志', icon: DocumentText24Regular },
-  { index: '/settings', label: '系统设置', icon: Settings24Regular }
+const menuGroups = [
+  {
+    title: '',
+    items: [
+      { index: '/', label: '仪表盘', icon: Board24Regular }
+    ]
+  },
+  {
+    title: '设备与通信',
+    items: [
+      { index: '/devices', label: '设备管理', icon: Phone24Regular },
+      { index: '/sms', label: '短信中心', icon: Mail24Regular },
+      { index: '/calls', label: '来电查询', icon: Call24Regular }
+    ]
+  },
+  {
+    title: '网络与通知',
+    items: [
+      { index: '/proxy', label: '代理管理', icon: Globe24Regular },
+      { index: '/notify', label: '通知中心', icon: Alert24Regular }
+    ]
+  },
+  {
+    title: '系统',
+    items: [
+      { index: '/logs', label: '实时日志', icon: DocumentText24Regular },
+      { index: '/settings', label: '系统设置', icon: Settings24Regular }
+    ]
+  }
 ]
 
 async function handleLogout() {
@@ -148,10 +168,21 @@ const activePath = computed(() => route.path)
         class="sidebar-menu !border-0 !border-r-0 !bg-transparent mt-2"
         router
       >
-        <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
-          <el-icon><component :is="item.icon" /></el-icon>
-          <template #title><span class="sidebar-menu-label">{{ item.label }}</span></template>
-        </el-menu-item>
+        <template v-for="group in menuGroups" :key="group.title || 'top'">
+          <template v-if="!group.title">
+            <el-menu-item v-for="item in group.items" :key="item.index" :index="item.index">
+              <el-icon><component :is="item.icon" /></el-icon>
+              <template #title><span class="sidebar-menu-label">{{ item.label }}</span></template>
+            </el-menu-item>
+          </template>
+          <el-menu-item-group v-else class="sidebar-menu-group">
+            <template #title><span class="sidebar-group-title">{{ group.title }}</span></template>
+            <el-menu-item v-for="item in group.items" :key="item.index" :index="item.index">
+              <el-icon><component :is="item.icon" /></el-icon>
+              <template #title><span class="sidebar-menu-label">{{ item.label }}</span></template>
+            </el-menu-item>
+          </el-menu-item-group>
+        </template>
       </el-menu>
 
       <div class="absolute bottom-4 w-full px-3" v-if="!collapsed">
@@ -186,10 +217,21 @@ const activePath = computed(() => route.path)
           class="sidebar-menu !border-0 !border-r-0 !bg-transparent mt-2"
           router
         >
-          <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
-            <el-icon><component :is="item.icon" /></el-icon>
-            <template #title><span class="sidebar-menu-label">{{ item.label }}</span></template>
-          </el-menu-item>
+          <template v-for="group in menuGroups" :key="group.title || 'top'">
+            <template v-if="!group.title">
+              <el-menu-item v-for="item in group.items" :key="item.index" :index="item.index">
+                <el-icon><component :is="item.icon" /></el-icon>
+                <template #title><span class="sidebar-menu-label">{{ item.label }}</span></template>
+              </el-menu-item>
+            </template>
+            <el-menu-item-group v-else class="sidebar-menu-group">
+              <template #title><span class="sidebar-group-title">{{ group.title }}</span></template>
+              <el-menu-item v-for="item in group.items" :key="item.index" :index="item.index">
+                <el-icon><component :is="item.icon" /></el-icon>
+                <template #title><span class="sidebar-menu-label">{{ item.label }}</span></template>
+              </el-menu-item>
+            </el-menu-item-group>
+          </template>
         </el-menu>
 
         <div class="absolute bottom-4 w-full px-3">
@@ -258,6 +300,7 @@ const activePath = computed(() => route.path)
   --sidebar-menu-active-bg: linear-gradient(135deg, rgba(6, 182, 212, 0.14), rgba(20, 184, 166, 0.1));
   --sidebar-menu-active-color: #0f766e;
   --sidebar-menu-active-ring: rgba(6, 182, 212, 0.16);
+  --sidebar-group-title-color: #94a3b8;
 }
 
 .sidebar-brand-title {
@@ -306,6 +349,7 @@ const activePath = computed(() => route.path)
   --sidebar-menu-active-bg: linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(45, 212, 191, 0.12));
   --sidebar-menu-active-color: #99f6e4;
   --sidebar-menu-active-ring: rgba(103, 232, 249, 0.18);
+  --sidebar-group-title-color: rgba(255, 255, 255, 0.32);
 }
 
 :deep(.sidebar-menu) {
@@ -316,10 +360,10 @@ const activePath = computed(() => route.path)
 }
 
 :deep(.sidebar-menu .el-menu-item) {
-  height: 40px;
-  min-height: 40px;
-  line-height: 40px;
-  margin: 2px 8px;
+  height: 46px;
+  min-height: 46px;
+  line-height: 46px;
+  margin: 3px 8px;
   border-radius: 10px;
   padding-left: 13px !important;
   padding-right: 13px !important;
@@ -328,6 +372,24 @@ const activePath = computed(() => route.path)
   letter-spacing: 0;
   color: var(--sidebar-menu-text);
   transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+:deep(.sidebar-menu .el-menu-item-group) {
+  margin-top: 10px;
+}
+
+:deep(.sidebar-menu .el-menu-item-group:first-child) {
+  margin-top: 0;
+}
+
+:deep(.sidebar-menu .el-menu-item-group__title) {
+  padding: 8px 20px 6px !important;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: var(--sidebar-group-title-color);
 }
 
 :deep(.sidebar-menu .el-menu-item .el-icon) {
@@ -419,6 +481,18 @@ const activePath = computed(() => route.path)
   height: 36px;
   display: grid;
   place-items: center;
+}
+
+:deep(.sidebar-menu.el-menu--collapse .el-menu-item-group) {
+  margin-top: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+:deep(.sidebar-menu.el-menu--collapse .el-menu-item-group__title) {
+  display: none;
 }
 
 .main-inner {
