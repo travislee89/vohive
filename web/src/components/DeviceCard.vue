@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { DashboardDevice } from '../types/api'
 import StatusLight from './StatusLight.vue'
+import { getMccMncIndex, resolveOperatorName, type MccMncRow } from '../utils/mcc-mnc'
 import {
   Cellular3G24Regular,
   Cellular4G24Regular,
   Cellular5G24Regular,
   CellularData124Regular,
-  Wifi124Regular, 
+  Wifi124Regular,
   Globe24Regular,
   Sim24Regular
 } from '@vicons/fluent'
@@ -16,6 +17,13 @@ const props = defineProps<{ device: DashboardDevice }>()
 const emit = defineEmits<{
   'open-device': [id: string]
 }>()
+
+const mccMncIndex = ref<Map<string, MccMncRow> | null>(null)
+onMounted(async () => {
+  mccMncIndex.value = await getMccMncIndex()
+})
+
+const operatorDisplay = computed(() => resolveOperatorName(props.device?.operator, '', mccMncIndex.value))
 
 const displayNetworkMode = computed(() => {
   const mode = String(props.device?.network_mode || '').trim()
@@ -122,7 +130,7 @@ function getSignalBars(dbm: number | null | undefined) {
               </span>
             </div>
             <span class="flex-1 min-w-0 text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap truncate">
-              {{ device.vowifi_active ? 'Wi-Fi Calling' : (device.operator || '检测中...') }}
+              {{ device.vowifi_active ? 'Wi-Fi Calling' : (operatorDisplay || '检测中...') }}
             </span>
           </div>
           <div v-if="!device.vowifi_active" class="flex items-center gap-1" title="信号强度">
