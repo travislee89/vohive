@@ -587,6 +587,60 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorMessage'
 
+  /settings/opencellid:
+    get:
+      tags: [settings]
+      summary: 获取 OpenCellID API Key
+      responses:
+        '200':
+          description: 当前 OpenCellID 配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenCellIDSettings'
+    put:
+      tags: [settings]
+      summary: 保存 OpenCellID API Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenCellIDSettings'
+      responses:
+        '200':
+          description: 保存成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/ErrorMessage'
+
+  /settings/opencellid/locate:
+    post:
+      tags: [settings]
+      summary: 根据小区定位参数查询 OpenCellID 基站定位
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenCellIDLocateRequest'
+      responses:
+        '200':
+          description: 基站定位结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenCellIDLocateResponse'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '502':
+          $ref: '#/components/responses/ErrorMessage'
+
   /settings/password:
     post:
       tags: [settings]
@@ -2900,6 +2954,45 @@ components:
     UpdateNotificationSettingsRequest:
       allOf:
         - $ref: '#/components/schemas/NotificationSettings'
+
+    OpenCellIDSettings:
+      type: object
+      properties:
+        key:
+          type: string
+          description: OpenCellID API Key（https://opencellid.org/）
+
+    OpenCellIDLocateRequest:
+      type: object
+      required: [mcc, mnc, lac, cid, network_mode]
+      properties:
+        mcc:
+          type: string
+        mnc:
+          type: string
+        lac:
+          type: string
+          description: 十六进制 LAC/TAC，如 "01F9"
+        cid:
+          type: string
+          description: 十六进制 Cell ID，如 "D08E01"
+        network_mode:
+          type: string
+          description: 当前网络制式（GSM/WCDMA/LTE/NR）
+
+    OpenCellIDLocateResponse:
+      type: object
+      properties:
+        lat:
+          type: number
+        lon:
+          type: number
+        range:
+          type: integer
+        samples:
+          type: integer
+        radio:
+          type: string
 
     TestWebhookRequest:
       type: object

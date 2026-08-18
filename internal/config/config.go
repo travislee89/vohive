@@ -97,12 +97,13 @@ type Config struct {
 	QQ       QQConfig       `mapstructure:"qq"`
 	Webhook  WebhookConfig  `mapstructure:"webhook"`
 
-	Bark     BarkConfig     `mapstructure:"bark"`
-	Email    EmailConfig    `mapstructure:"email"`
-	Pushplus PushplusConfig `mapstructure:"pushplus"`
-	Web      WebConfig      `mapstructure:"web"`
-	Proxy    ProxyConfig    `mapstructure:"proxy"`
-	VoWiFi   VoWiFiConfig   `mapstructure:"vowifi"`
+	Bark       BarkConfig       `mapstructure:"bark"`
+	Email      EmailConfig      `mapstructure:"email"`
+	Pushplus   PushplusConfig   `mapstructure:"pushplus"`
+	Web        WebConfig        `mapstructure:"web"`
+	Proxy      ProxyConfig      `mapstructure:"proxy"`
+	VoWiFi     VoWiFiConfig     `mapstructure:"vowifi"`
+	OpenCellID OpenCellIDConfig `mapstructure:"opencellid"`
 }
 
 // ProxyConfig 定义代理服务配置
@@ -382,6 +383,11 @@ type PushplusConfig struct {
 	Channel string `mapstructure:"channel"`
 }
 
+// OpenCellIDConfig 保存用于查询 OpenCellID 基站定位 API 的密钥。
+type OpenCellIDConfig struct {
+	Key string `mapstructure:"key"`
+}
+
 func Load(path string) (*Config, error) {
 	if err := migrateLegacyManagedNetworkField(path); err != nil {
 		return nil, err
@@ -409,6 +415,7 @@ func Load(path string) (*Config, error) {
 	viper.SetDefault("web.password", "admin")
 	viper.SetDefault("vowifi.enabled", false)
 	viper.SetDefault("vowifi.mode", "vowifi")
+	viper.SetDefault("opencellid.key", "")
 	viper.SetDefault("imscore.use_sipgo_udp", false)
 
 	// 官方默认推送秘钥与用户 (留空则不执行 Push)
