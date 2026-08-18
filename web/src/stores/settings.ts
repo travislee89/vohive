@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { AppError } from '../types/domain'
 import {
   systemService,
@@ -13,6 +13,7 @@ import {
   type TestBarkResponse,
   type TestEmailResponse
 } from '../services/system'
+import { opencellidService } from '../services/opencellid'
 
 const DEFAULT_SYSTEM_INFO: SystemInfo = {
   version: '',
@@ -165,6 +166,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const barkSettings = ref<BarkSettings>({ ...DEFAULT_BARK_SETTINGS })
   const emailForm = ref<EmailForm>({ ...DEFAULT_EMAIL_FORM })
   const pushplusForm = ref<PushplusForm>({ ...DEFAULT_PUSHPLUS_FORM })
+  const openCellIdKey = ref('')
 
   const loadingSystemInfo = ref(false)
   const loadingNotifications = ref(false)
@@ -173,6 +175,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const testingBark = ref(false)
   const testingEmail = ref(false)
   const changingPassword = ref(false)
+  const loadingOpenCellId = ref(false)
+  const savingOpenCellId = ref(false)
+
+  const hasOpenCellIdKey = computed(() => !!openCellIdKey.value.trim())
 
   const error = ref<AppError | null>(null)
 
@@ -400,6 +406,32 @@ export const useSettingsStore = defineStore('settings', () => {
     return result as { ok: true; data: TestEmailResponse } | { ok: false; error: AppError }
   }
 
+  async function fetchOpenCellId() {
+    loadingOpenCellId.value = true
+    const result = await opencellidService.getSettings()
+    if (result.ok) {
+      openCellIdKey.value = result.data.key || ''
+      error.value = null
+    } else {
+      error.value = result.error
+    }
+    loadingOpenCellId.value = false
+    return result
+  }
+
+  async function saveOpenCellIdKey(key: string) {
+    savingOpenCellId.value = true
+    const result = await opencellidService.saveSettings({ key })
+    if (result.ok) {
+      openCellIdKey.value = key
+      error.value = null
+    } else {
+      error.value = result.error
+    }
+    savingOpenCellId.value = false
+    return result
+  }
+
   async function changePassword(payload: { old_password: string; new_password: string; confirm_password: string }) {
     changingPassword.value = true
     const result = await systemService.changePassword(payload)
@@ -429,6 +461,8 @@ export const useSettingsStore = defineStore('settings', () => {
     barkSettings,
     emailForm,
     pushplusForm,
+    openCellIdKey,
+    hasOpenCellIdKey,
     loadingSystemInfo,
     loadingNotifications,
     savingNotifications,
@@ -436,6 +470,8 @@ export const useSettingsStore = defineStore('settings', () => {
     testingBark,
     testingEmail,
     changingPassword,
+    loadingOpenCellId,
+    savingOpenCellId,
     error,
     fetchSystemInfo,
     fetchNotifications,
@@ -446,6 +482,8 @@ export const useSettingsStore = defineStore('settings', () => {
     testEmailFromForm,
     changePassword,
     changePasswordFromForm,
-    resetPasswordForm
+    resetPasswordForm,
+    fetchOpenCellId,
+    saveOpenCellIdKey
   }
 })

@@ -10,11 +10,30 @@ import {
   Save24Regular,
   Server24Regular,
   Alert24Regular,
-  DocumentText24Regular
+  DocumentText24Regular,
+  Location24Regular
 } from '@vicons/fluent'
 
 const settingsStore = useSettingsStore()
-const { systemInfo, changingPassword, passwordForm } = storeToRefs(settingsStore)
+const { systemInfo, changingPassword, passwordForm, openCellIdKey, savingOpenCellId } = storeToRefs(settingsStore)
+
+const openCellIdKeyInput = ref('')
+
+async function loadOpenCellId() {
+  const result = await settingsStore.fetchOpenCellId()
+  if (result.ok) {
+    openCellIdKeyInput.value = openCellIdKey.value
+  }
+}
+
+async function saveOpenCellIdKey() {
+  const result = await settingsStore.saveOpenCellIdKey(openCellIdKeyInput.value.trim())
+  if (!result.ok) {
+    ElMessage.error(result.error.message || 'OpenCellID Key 保存失败')
+    return
+  }
+  ElMessage.success('OpenCellID Key 已保存')
+}
 
 async function changePassword() {
   if (passwordForm.value.new_password !== passwordForm.value.confirm_password) {
@@ -108,6 +127,7 @@ async function doApplyUpdate() {
 
 onMounted(() => {
   loadSystemInfo()
+  loadOpenCellId()
 })
 
 onBeforeUnmount(() => {
@@ -227,6 +247,39 @@ onBeforeUnmount(() => {
                 </el-button>
               </div>
             </div>
+         </div>
+      </div>
+
+      <!-- OpenCellID Card -->
+      <div class="ui-card p-8 relative overflow-hidden group">
+         <div class="absolute top-0 right-0 w-40 h-40 bg-blue-500/5 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
+
+         <div class="flex items-center gap-3 mb-6 relative z-10">
+            <div class="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
+               <el-icon size="24"><Location24Regular /></el-icon>
+            </div>
+            <div>
+               <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">OpenCellID</h3>
+               <p class="text-xs text-gray-500">
+                 用于基站定位查询的 API Key
+                 <a href="https://my.opencellid.org" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline">申请 Key</a>
+               </p>
+            </div>
+         </div>
+
+         <div class="space-y-4 relative z-10">
+             <div class="space-y-1">
+                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">API Key</label>
+                <el-input v-model="openCellIdKeyInput" placeholder="从 opencellid.org 申请的 Key" size="large" />
+                <p class="text-xs text-gray-400">配置后，可在设备管理 - 蜂窝网络页通过小区定位参数查询基站的经纬度。</p>
+             </div>
+
+             <div class="pt-4">
+                 <el-button type="primary" :loading="savingOpenCellId" @click="saveOpenCellIdKey" size="large" class="w-full !border-0">
+                   <el-icon><Save24Regular /></el-icon>
+                   保存
+                 </el-button>
+             </div>
          </div>
       </div>
     </div>

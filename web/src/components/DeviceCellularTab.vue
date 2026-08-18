@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Copy20Regular } from '@vicons/fluent'
+import { computed, onMounted, ref } from 'vue'
+import { Copy20Regular, Dismiss20Regular, Location20Regular } from '@vicons/fluent'
+import { ElMessage } from 'element-plus'
 import type { DeviceOverviewItem } from '../types/api'
 import { copyToClipboard } from '../utils/clipboard'
 import { resolveOperatorName, type MccMncRow } from '../utils/mcc-mnc'
+import { opencellidService } from '../services/opencellid'
 import StatusLight from './StatusLight.vue'
 import type { StatusLightTone } from './statusLight'
 import FieldRow from './FieldRow.vue'
@@ -140,6 +142,46 @@ const hasLocationParams = computed(() => {
 async function copyLocationJSON() {
   await copyToClipboard(JSON.stringify(locationParams.value, null, 2), '已复制定位参数 JSON')
 }
+
+// ---- OpenCellID 基站定位查询 ----
+const hasOpenCellIdKey = ref(false)
+const locating = ref(false)
+const locateResult = ref<{ lat: number; lon: number; radio: string; range: number } | null>(null)
+
+onMounted(async () => {
+  const result = await opencellidService.getSettings()
+  hasOpenCellIdKey.value = result.ok && !!result.data.key?.trim()
+})
+
+const canLocate = computed(() => hasOpenCellIdKey.value && hasLocationParams.value)
+
+const mapsURL = computed(() =>
+  locateResult.value ? `https://www.google.com/maps?q=${locateResult.value.lat},${locateResult.value.lon}` : ''
+)
+
+async function locateWithOpenCellID() {
+  if (!canLocate.value) return
+  locating.value = true
+  try {
+    const result = await opencellidService.locate({
+      mcc: locationParams.value.mcc,
+      mnc: locationParams.value.mnc,
+      lac: locationParams.value.lac,
+      cid: locationParams.value.cid,
+      network_mode: modem.value?.network_mode || ''
+    })
+    if (!result.ok) {
+      ElMessage.error(result.error.message || '查询 OpenCellID 定位失败')
+      return
+    }
+    const { lat, lon, range, radio } = result.data
+    locateResult.value = { lat, lon, radio, range }
+  } catch (e: any) {
+    ElMessage.error(e?.message || '查询 OpenCellID 定位失败')
+  } finally {
+    locating.value = false
+  }
+}
 </script>
 
 <template>
@@ -255,21 +297,55 @@ async function copyLocationJSON() {
         <div class="ui-panel-muted p-4">
           <div class="flex items-center justify-between mb-3">
             <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">小区定位参数</div>
-            <el-button size="small" plain :disabled="!hasLocationParams" @click="copyLocationJSON">
-              <el-icon class="mr-1"><Copy20Regular /></el-icon>
-              复制 JSON
-            </el-button>
+            <div class="flex items-center gap-2">
+              <el-button size="small" plain :disabled="!hasLocationParams" @click="copyLocationJSON">
+                <el-icon class="mr-1"><Copy20Regular /></el-icon>
+                复制 JSON
+              </el-button>
+              <el-button
+                size="small"
+                plain
+                :disabled="!canLocate"
+                :loading="locating"
+                :title="!hasOpenCellIdKey ? '请先在系统设置中配置 OpenCellID Key' : ''"
+                @click="locateWithOpenCellID"
+              >
+                <el-icon class="mr-1"><Location20Regular /></el-icon>
+                OpenCellID 定位
+              </el-button>
+            </div>
           </div>
-          <div class="text-xs text-gray-400 mb-3">可用于第三方基站定位 API（高德、百度、Google 等）</div>
+          <div class="text-xs text-gray-400 mb-3">可用于第三方基站定位 API（高德、百度、Google、OpenCellID 等）</div>
           <div v-if="!hasLocationParams" class="flex items-center justify-center py-6 text-sm text-gray-400">
             暂无定位数据
           </div>
-          <div v-else class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm text-gray-700 dark:text-gray-200">
-            <FieldRow label="MCC" :value="locationParams.mcc" monospace copyable />
-            <FieldRow label="MNC" :value="locationParams.mnc" monospace copyable />
-            <FieldRow label="LAC/TAC" :value="locationParams.lac" monospace copyable />
-            <FieldRow label="CID" :value="locationParams.cid" monospace copyable />
-          </div>
+          <template v-else>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm text-gray-700 dark:text-gray-200 mb-3">
+              <FieldRow label="MCC" :value="locationParams.mcc" monospace copyable />
+              <FieldRow label="MNC" :value="locationParams.mnc" monospace copyable />
+              <FieldRow label="LAC/TAC" :value="locationParams.lac" monospace copyable />
+              <FieldRow label="CID" :value="locationParams.cid" monospace copyable />
+            </div>
+            <div v-if="locateResult" class="relative rounded-lg border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 p-3 pr-8 text-sm text-gray-700 dark:text-gray-200">
+              <button
+                type="button"
+                class="absolute top-2 right-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label="关闭"
+                @click="locateResult = null"
+              >
+                <el-icon size="16"><Dismiss20Regular /></el-icon>
+              </button>
+              <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <div><span class="text-gray-500">纬度：</span>{{ locateResult.lat }}</div>
+                <div><span class="text-gray-500">经度：</span>{{ locateResult.lon }}</div>
+                <div><span class="text-gray-500">网络制式：</span>{{ locateResult.radio || '--' }}</div>
+                <div><span class="text-gray-500">估计误差半径：</span>{{ locateResult.range ? locateResult.range + ' 米' : '--' }}</div>
+              </div>
+              <a :href="mapsURL" target="_blank" rel="noopener noreferrer" class="inline-block mt-2 text-blue-600 dark:text-blue-400 hover:underline">
+                在 Google Maps 中查看
+              </a>
+            </div>
+          </template>
         </div>
       </div>
     </template>
