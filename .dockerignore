@@ -3,20 +3,36 @@
 .gitignore
 go.work
 
+CLAUDE.md
+AGENTS.md
+.claude
+.idea
+.vscode
+.agent
+.shared
+**/*.swp
+**/*.swo
+
+
 **/*.log
 **/*.db
 **/*.sqlite
 **/*.sqlite3
+**/*.db-journal
 
 logs
 data
 config
 tmp
 dist
+packaging
 
 web/node_modules
 web/dist
+web-reader/dist/
+web-reader/node_modules/
 
 internal/web/dist
 
 **/.DS_Store
+**/Thumbs.db
