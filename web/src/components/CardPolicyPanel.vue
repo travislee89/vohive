@@ -354,7 +354,7 @@ async function onRoamingDataToggle(rawVal: string | number | boolean) {
           <div class="flex items-center justify-between">
             <div>
               <div class="text-sm font-bold text-gray-800 dark:text-gray-100">VoWiFi</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">启用后进飞行模式，不支持国内运营商</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">启用后进飞行模式，不支持中国运营商</div>
             </div>
             <div class="flex items-center gap-2">
               <span v-if="vowifiFailed" class="text-xs text-orange-500 dark:text-orange-400">未生效</span>
