@@ -1412,7 +1412,7 @@ usePollingScheduler(async () => {
                 @policy-changed="onCardPolicyChanged"
               />
             </el-tab-pane>
-            <el-tab-pane label="配置" name="config" lazy>
+            <el-tab-pane label="设备配置" name="config" lazy>
               <DeviceConfigTab
                 :edit-config="editConfig"
                 :device-status="selectedDetail"
