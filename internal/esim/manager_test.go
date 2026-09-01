@@ -2142,7 +2142,7 @@ func TestClassifyDownloadErrorDoesNotTreatNonLoadProfileElementsReason10AsInsuff
 }
 
 func TestClassifyDownloadErrorSeesWrappedBPPError(t *testing.T) {
-	baseErr := &sgp22.LoadBoundProfilePackageError{BPPCommandID: 5, ErrorReason: 9}
+	var baseErr error = &sgp22.LoadBoundProfilePackageError{BPPCommandID: 5, ErrorReason: 9}
 	err := fmt.Errorf("下载 profile 失败: %w (cancel session error: remote failed)", baseErr)
 
 	info := ClassifyDownloadError(err)
