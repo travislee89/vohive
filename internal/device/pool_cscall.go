@@ -16,9 +16,13 @@ func newCSCallManagerForWorker(w *Worker, r *sipgw.Registrar) *cscall.Manager {
 	}
 	switch {
 	case w.Backend != nil && w.Backend.Mode() == backend.BackendAT && w.Modem != nil:
-		return cscall.NewManagerWithController(w.ID, w.Config.AudioDevice, cscall.NewATController(w.Modem), r)
+		mgr := cscall.NewManagerWithController(w.ID, w.Config.AudioDevice, cscall.NewATController(w.Modem), r)
+		startCSCallHistoryRecorder(w, mgr)
+		return mgr
 	case w.Backend != nil && w.Backend.Mode() == backend.BackendQMI && w.QMICore != nil:
-		return cscall.NewManagerWithController(w.ID, w.Config.AudioDevice, cscall.NewQMIController(w.QMICore), r)
+		mgr := cscall.NewManagerWithController(w.ID, w.Config.AudioDevice, cscall.NewQMIController(w.QMICore), r)
+		startCSCallHistoryRecorder(w, mgr)
+		return mgr
 	default:
 		logger.Debug(fmt.Sprintf("[%s] 跳过 CS 域语音桥接：缺少可用控制面", w.ID),
 			"backend", workerBackendMode(w),

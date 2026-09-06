@@ -197,6 +197,7 @@ func Init(dbPath string) error {
 		&UpstreamProxyCountryRule{},
 		&SMS{},
 		&SMSContact{},
+		&CallLog{},
 		&SMSDelivery{},
 		&SMSDeliveryPart{},
 		&TrafficMinute{},

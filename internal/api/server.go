@@ -323,8 +323,16 @@ func (s *Server) newRouter() *gin.Engine {
 		api.POST("/devices/:device_id/operator_selection", s.handleDeviceMgmtSetOperatorSelection)          // 锁定运营商或恢复自动
 
 		// ===== 通话记录 (CS Call) =====
-		api.GET("/devices/:device_id/calls", s.handleDeviceMgmtCSCallList)          // 查询当前活跃呼叫列表
-		api.GET("/devices/:device_id/calls/events", s.handleDeviceMgmtCSCallEvents) // SSE 实时推送来电事件
+		api.GET("/devices/:device_id/calls", s.handleDeviceMgmtCSCallList)            // 查询当前活跃呼叫列表
+		api.GET("/devices/:device_id/calls/events", s.handleDeviceMgmtCSCallEvents)   // SSE 实时推送来电事件
+		api.GET("/devices/:device_id/calls/history", s.handleDeviceMgmtCSCallHistory) // 查询通话历史记录
+
+		// ===== 通知中心 =====
+		api.GET("/notification-center/summary", s.handleNotificationCenterSummary)           // 获取短信/来电未读徽标计数
+		api.GET("/notification-center/feed", s.handleNotificationCenterFeed)                 // 获取最近未读通知信息流
+		api.POST("/notification-center/sms/read", s.handleNotificationCenterMarkSMSRead)     // 标记某会话短信已读
+		api.POST("/notification-center/calls/read", s.handleNotificationCenterMarkCallsRead) // 标记通话记录已读
+		api.POST("/notification-center/clear-all", s.handleNotificationCenterClearAll)       // 清理全部未读短信与来电
 
 		// ===== 代理管理 =====
 		api.GET("/proxy-instances/overview", s.handleProxyOverview)                             // 获取代理实例概览

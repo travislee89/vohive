@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { useSMSStore } from '../stores/sms'
+import { useNotificationsStore } from '../stores/notifications'
 import { usePollingScheduler } from '../composables/usePollingScheduler'
 import { toAppError } from '../services/http'
 import type { SmsThreadQueryParams } from '../services/sms'
@@ -31,11 +32,13 @@ type SmsThread = {
   localPhone?: string
   peerLower: string
   lastMessageLower: string
+  unreadCount: number
 }
 
 const route = useRoute()
 const router = useRouter()
 const smsStore = useSMSStore()
+const notifications = useNotificationsStore()
 
 const devices = ref<DeviceMgmtListItem[]>([])
 const devicesLastOkAt = ref<number | null>(null)
@@ -496,6 +499,7 @@ async function selectThread(key: string, options: { syncRoute?: boolean; silent?
   const ok = await fetchThreadLatest(silent)
   if (!ok) return
   markThreadSeen(t)
+  if (t.unreadCount > 0) void notifications.markSmsRead(t.imsi, t.peer)
   if (scrollToBottom) scrollThreadToBottom()
 }
 

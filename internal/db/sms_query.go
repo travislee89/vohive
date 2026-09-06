@@ -77,6 +77,48 @@ func GetSMSContactsByICCID(iccid string, limit int, beforeTs *time.Time, beforeP
 	return out, err
 }
 
+// SumSMSUnreadCount 返回全部会话未读短信总数，供通知中心汇总徽标使用。
+func SumSMSUnreadCount() (int64, error) {
+	if DB == nil {
+		return 0, nil
+	}
+	var total int64
+	err := DB.Model(&SMSContact{}).Select("COALESCE(SUM(unread_count), 0)").Scan(&total).Error
+	return total, err
+}
+
+// GetUnreadSMSContacts 返回存在未读消息的会话，按最后消息时间倒序，供通知中心信息流使用。
+func GetUnreadSMSContacts(limit int) ([]SMSContact, error) {
+	if DB == nil {
+		return []SMSContact{}, nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	var out []SMSContact
+	err := DB.Where("unread_count > 0").Order("last_timestamp desc").Limit(limit).Find(&out).Error
+	return out, err
+}
+
+// ResetSMSContactUnread 将指定会话的未读计数清零。
+func ResetSMSContactUnread(imsi, peer string) error {
+	if DB == nil {
+		return nil
+	}
+	return DB.Model(&SMSContact{}).Where("imsi = ? AND peer = ?", imsi, peer).Update("unread_count", 0).Error
+}
+
+// ResetAllSMSUnread 清零全部会话的未读计数，供通知中心「清理全部」使用。
+func ResetAllSMSUnread() error {
+	if DB == nil {
+		return nil
+	}
+	return DB.Model(&SMSContact{}).Where("unread_count > 0").Update("unread_count", 0).Error
+}
+
 func GetSMSByIMSIAndPeer(imsi string, peer string, limit int, beforeTs *time.Time, beforeID uint) ([]SMS, error) {
 	if DB == nil {
 		return []SMS{}, nil

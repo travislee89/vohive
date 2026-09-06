@@ -20,6 +20,7 @@ export type SmsThreadVM = {
   localPhone?: string
   peerLower: string
   lastMessageLower: string
+  unreadCount: number
 }
 
 export type DashboardVM = DashboardDevice

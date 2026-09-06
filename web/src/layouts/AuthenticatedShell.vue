@@ -2,10 +2,13 @@
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch, type PropType } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useNotificationsStore } from '../stores/notifications'
+import { usePollingScheduler } from '../composables/usePollingScheduler'
 import { Expand, Fold } from '@element-plus/icons-vue'
 import LoadingScreen from '../components/LoadingScreen.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import SwitchDark from '../components/SwitchDark.vue'
+import NotificationBell from '../components/notifications/NotificationBell.vue'
 import { debugCollector } from '../debug/collector'
 import type { ThemeMode } from '../theme'
 import {
@@ -33,13 +36,21 @@ const emit = defineEmits(['toggle-theme'])
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const notifications = useNotificationsStore()
 const collapsed = ref(false)
 const isMobile = ref(false)
 const drawerOpen = ref(false)
 const debugOpen = ref(false)
 const DebugPanel = defineAsyncComponent(() => import('../components/DebugPanel.vue'))
 
-const menuGroups = [
+type MenuItem = {
+  index: string
+  label: string
+  icon: unknown
+  badgeKey?: 'sms' | 'calls'
+}
+
+const menuGroups: { title: string; items: MenuItem[] }[] = [
   {
     title: '',
     items: [
@@ -50,8 +61,8 @@ const menuGroups = [
     title: '设备与通信',
     items: [
       { index: '/devices', label: '设备管理', icon: Phone24Regular },
-      { index: '/sms', label: '短信中心', icon: Mail24Regular },
-      { index: '/calls', label: '通话记录', icon: Call24Regular }
+      { index: '/sms', label: '短信中心', icon: Mail24Regular, badgeKey: 'sms' },
+      { index: '/calls', label: '通话记录', icon: Call24Regular, badgeKey: 'calls' }
     ]
   },
   {
@@ -70,6 +81,18 @@ const menuGroups = [
     ]
   }
 ]
+
+function badgeCount(key?: 'sms' | 'calls') {
+  if (key === 'sms') return notifications.smsUnread
+  if (key === 'calls') return notifications.callsUnread
+  return 0
+}
+
+usePollingScheduler(() => notifications.refreshAll(), 5000, {
+  immediate: true,
+  maxIntervalMs: 60000,
+  backgroundIntervalMs: 15000
+})
 
 async function handleLogout() {
   const { ElMessageBox } = await import('element-plus')
@@ -173,14 +196,24 @@ const activePath = computed(() => route.path)
         <template v-for="group in menuGroups" :key="group.title || 'top'">
           <template v-if="!group.title">
             <el-menu-item v-for="item in group.items" :key="item.index" :index="item.index">
-              <el-icon><component :is="item.icon" /></el-icon>
+              <el-icon>
+                <el-badge v-if="badgeCount(item.badgeKey) > 0" :value="badgeCount(item.badgeKey)" :max="99" class="nav-badge">
+                  <component :is="item.icon" />
+                </el-badge>
+                <component :is="item.icon" v-else />
+              </el-icon>
               <template #title><span class="sidebar-menu-label">{{ item.label }}</span></template>
             </el-menu-item>
           </template>
           <el-menu-item-group v-else class="sidebar-menu-group">
             <template #title><span class="sidebar-group-title">{{ group.title }}</span></template>
             <el-menu-item v-for="item in group.items" :key="item.index" :index="item.index">
-              <el-icon><component :is="item.icon" /></el-icon>
+              <el-icon>
+                <el-badge v-if="badgeCount(item.badgeKey) > 0" :value="badgeCount(item.badgeKey)" :max="99" class="nav-badge">
+                  <component :is="item.icon" />
+                </el-badge>
+                <component :is="item.icon" v-else />
+              </el-icon>
               <template #title><span class="sidebar-menu-label">{{ item.label }}</span></template>
             </el-menu-item>
           </el-menu-item-group>
@@ -222,14 +255,24 @@ const activePath = computed(() => route.path)
           <template v-for="group in menuGroups" :key="group.title || 'top'">
             <template v-if="!group.title">
               <el-menu-item v-for="item in group.items" :key="item.index" :index="item.index">
-                <el-icon><component :is="item.icon" /></el-icon>
+                <el-icon>
+                  <el-badge v-if="badgeCount(item.badgeKey) > 0" :value="badgeCount(item.badgeKey)" :max="99" class="nav-badge">
+                    <component :is="item.icon" />
+                  </el-badge>
+                  <component :is="item.icon" v-else />
+                </el-icon>
                 <template #title><span class="sidebar-menu-label">{{ item.label }}</span></template>
               </el-menu-item>
             </template>
             <el-menu-item-group v-else class="sidebar-menu-group">
               <template #title><span class="sidebar-group-title">{{ group.title }}</span></template>
               <el-menu-item v-for="item in group.items" :key="item.index" :index="item.index">
-                <el-icon><component :is="item.icon" /></el-icon>
+                <el-icon>
+                  <el-badge v-if="badgeCount(item.badgeKey) > 0" :value="badgeCount(item.badgeKey)" :max="99" class="nav-badge">
+                    <component :is="item.icon" />
+                  </el-badge>
+                  <component :is="item.icon" v-else />
+                </el-icon>
                 <template #title><span class="sidebar-menu-label">{{ item.label }}</span></template>
               </el-menu-item>
             </el-menu-item-group>
@@ -265,6 +308,7 @@ const activePath = computed(() => route.path)
         </div>
 
         <div class="flex items-center gap-3">
+          <NotificationBell />
           <SwitchDark :theme="theme" @toggle="() => emit('toggle-theme')" />
 
           <div class="hidden sm:flex items-center justify-center w-7 h-7 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 shadow-sm">
@@ -509,5 +553,16 @@ const activePath = computed(() => route.path)
 
 :deep(.mobile-drawer .el-drawer__body) {
   padding: 0 !important;
+}
+
+:deep(.nav-badge .el-badge__content) {
+  top: 2px;
+  right: 2px;
+  transform: translateY(-50%) translateX(100%) scale(0.85);
+}
+
+:deep(.notif-bell-badge .el-badge__content) {
+  top: 4px;
+  right: 4px;
 }
 </style>

@@ -44,7 +44,8 @@ function normalizeThread(contact: SMSContactDTO): SmsThreadVM {
     lastDeviceName: contact.device_name,
     localPhone: contact.local_phone || '',
     peerLower: String(contact.peer || '').toLowerCase(),
-    lastMessageLower: String(contact.last_content || '').toLowerCase()
+    lastMessageLower: String(contact.last_content || '').toLowerCase(),
+    unreadCount: contact.unread_count || 0
   }
 }
 

@@ -1,6 +1,6 @@
 import { api } from '../stores/auth'
 import { callService } from './http'
-import type { CSCallListResponse } from '../types/api'
+import type { CSCallHistoryResponse, CSCallListResponse } from '../types/api'
 
 export const callsService = {
   /**
@@ -9,6 +9,16 @@ export const callsService = {
   async list(deviceId: string) {
     return callService(async () => {
       const res = await api.get<CSCallListResponse>(`/devices/${deviceId}/calls`)
+      return res.data
+    })
+  },
+
+  /**
+   * 查询指定设备的通话历史记录
+   */
+  async listHistory(deviceId: string, limit = 50) {
+    return callService(async () => {
+      const res = await api.get<CSCallHistoryResponse>(`/devices/${deviceId}/calls/history`, { params: { limit } })
       return res.data
     })
   }

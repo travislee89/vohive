@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 
-	"github.com/travislee89/vohive/internal/cscall"
 	"github.com/gin-gonic/gin"
+	"github.com/travislee89/vohive/internal/cscall"
+	"github.com/travislee89/vohive/internal/db"
 )
 
 // cscallStateText 将 cscall.CallState 映射为可读的状态文本
@@ -128,6 +130,68 @@ func (s *Server) handleDeviceMgmtCSCallList(c *gin.Context) {
 	c.JSON(http.StatusOK, cscallCallsResponse{
 		DeviceID: deviceID,
 		Calls:    cscallCallInfosToDTOs(mgr.Calls(ctx)),
+	})
+}
+
+// cscallCallLogDTO 对外暴露的通话记录 DTO
+type cscallCallLogDTO struct {
+	ID         uint       `json:"id"`
+	Number     string     `json:"number"`
+	Direction  string     `json:"direction"` // in:来电, out:去电
+	Outcome    string     `json:"outcome"`   // ringing/answered/missed
+	StartedAt  time.Time  `json:"started_at"`
+	AnsweredAt *time.Time `json:"answered_at,omitempty"`
+	EndedAt    *time.Time `json:"ended_at,omitempty"`
+	Unread     bool       `json:"unread"`
+}
+
+// cscallCallHistoryResponse 通话历史记录响应
+type cscallCallHistoryResponse struct {
+	DeviceID string             `json:"device_id"`
+	Logs     []cscallCallLogDTO `json:"logs"`
+}
+
+func cscallCallLogsToDTOs(logs []db.CallLog) []cscallCallLogDTO {
+	out := make([]cscallCallLogDTO, 0, len(logs))
+	for _, l := range logs {
+		out = append(out, cscallCallLogDTO{
+			ID:         l.ID,
+			Number:     l.Number,
+			Direction:  l.Direction,
+			Outcome:    l.Outcome,
+			StartedAt:  l.StartedAt,
+			AnsweredAt: l.AnsweredAt,
+			EndedAt:    l.EndedAt,
+			Unread:     l.Unread,
+		})
+	}
+	return out
+}
+
+// handleDeviceMgmtCSCallHistory 处理 GET /devices/:device_id/calls/history —— 查询通话历史记录
+func (s *Server) handleDeviceMgmtCSCallHistory(c *gin.Context) {
+	deviceID := deviceIDParam(c)
+	if s.pool.GetWorker(deviceID) == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": errDeviceNotFound.Message, "hint": errDeviceNotFound.Hint})
+		return
+	}
+
+	limit := 50
+	if v := c.Query("limit"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	logs, err := db.ListCallLogsByDevice(deviceID, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询通话记录失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, cscallCallHistoryResponse{
+		DeviceID: deviceID,
+		Logs:     cscallCallLogsToDTOs(logs),
 	})
 }
 

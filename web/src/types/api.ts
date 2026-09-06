@@ -75,6 +75,46 @@ export type CSCallEvent = {
   ts: number
 }
 
+export type CallLogOutcome = 'ringing' | 'answered' | 'missed'
+
+export type CallLog = {
+  id: number
+  number: string
+  direction: 'in' | 'out'
+  outcome: CallLogOutcome
+  started_at: string
+  answered_at?: string
+  ended_at?: string
+  unread: boolean
+}
+
+export type CSCallHistoryResponse = {
+  device_id: string
+  logs: CallLog[]
+}
+
+// ===== 通知中心 =====
+export type NotificationSummary = {
+  sms_unread: number
+  calls_unread: number
+}
+
+export type NotificationFeedItem = {
+  kind: 'sms' | 'call'
+  device_id?: string
+  device_name?: string
+  timestamp: string
+  // kind=sms
+  imsi?: string
+  peer?: string
+  preview?: string
+  unread_count?: number
+  // kind=call
+  call_id?: number
+  number?: string
+  outcome?: CallLogOutcome
+}
+
 export type DeviceLifecyclePhase =
   | 'offline'
   | 'rebooting'

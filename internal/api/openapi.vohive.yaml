@@ -38,6 +38,8 @@ tags:
     description: 转发中心：转发规则与转发日志
   - name: automation
     description: 自动化中心：定时/间隔任务（重启基带、发送短信）与运行日志
+  - name: notification-center
+    description: 通知中心：短信/来电未读徽标计数与信息流
 paths:
   /docs:
     get:
@@ -433,6 +435,102 @@ paths:
         '500':
           $ref: '#/components/responses/ErrorMessage'
 
+  /notification-center/summary:
+    get:
+      tags: [notification-center]
+      summary: 获取短信/来电未读徽标计数
+      responses:
+        '200':
+          description: 未读计数汇总
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSummary'
+        '500':
+          $ref: '#/components/responses/ErrorMessage'
+
+  /notification-center/feed:
+    get:
+      tags: [notification-center]
+      summary: 获取最近未读通知信息流（合并短信与来电，按时间倒序）
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 通知信息流
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotificationFeedItem'
+        '500':
+          $ref: '#/components/responses/ErrorMessage'
+
+  /notification-center/sms/read:
+    post:
+      tags: [notification-center]
+      summary: 将指定短信会话标记为已读，清零该会话未读计数
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [peer]
+              properties:
+                imsi:
+                  type: string
+                peer:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/StatusOK'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/ErrorMessage'
+
+  /notification-center/calls/read:
+    post:
+      tags: [notification-center]
+      summary: 将通话记录标记为已读（按单条 id，或按 device_id 批量清零）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                device_id:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/StatusOK'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/ErrorMessage'
+
+  /notification-center/clear-all:
+    post:
+      tags: [notification-center]
+      summary: 清理全部未读通知（短信与来电一并清零）
+      responses:
+        '200':
+          $ref: '#/components/responses/StatusOK'
+        '500':
+          $ref: '#/components/responses/ErrorMessage'
+
   /sms/messages/{id}:
     delete:
       tags: [sms]
@@ -784,6 +882,36 @@ paths:
                     $ref: '#/components/schemas/DeviceConfigDTO'
         '400':
           $ref: '#/components/responses/ErrorMessage'
+        '404':
+          $ref: '#/components/responses/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/ErrorMessage'
+
+  /devices/{device_id}/calls/history:
+    get:
+      tags: [devices]
+      summary: 查询指定设备的通话历史记录
+      parameters:
+        - $ref: '#/components/parameters/DeviceIDPath'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: 通话历史记录列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  device_id:
+                    type: string
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CallLog'
         '404':
           $ref: '#/components/responses/ErrorMessage'
         '500':
@@ -2214,6 +2342,16 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    StatusOK:
+      description: 操作成功
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: ok
 
   schemas:
     ErrorResponse:
@@ -2859,6 +2997,68 @@ components:
         device_name:
           type: string
         local_phone:
+          type: string
+
+    CallLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        number:
+          type: string
+        direction:
+          type: string
+          enum: [in, out]
+        outcome:
+          type: string
+          enum: [ringing, answered, missed]
+        started_at:
+          type: string
+          format: date-time
+        answered_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        unread:
+          type: boolean
+
+    NotificationSummary:
+      type: object
+      properties:
+        sms_unread:
+          type: integer
+        calls_unread:
+          type: integer
+
+    NotificationFeedItem:
+      type: object
+      description: kind=sms 时携带 imsi/peer/preview/unread_count；kind=call 时携带 call_id/number/outcome
+      properties:
+        kind:
+          type: string
+          enum: [sms, call]
+        device_id:
+          type: string
+        device_name:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        imsi:
+          type: string
+        peer:
+          type: string
+        preview:
+          type: string
+        unread_count:
+          type: integer
+        call_id:
+          type: integer
+        number:
+          type: string
+        outcome:
           type: string
 
     TelegramSettings:
