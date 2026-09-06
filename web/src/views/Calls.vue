@@ -168,7 +168,7 @@ onUnmounted(() => {
 
 <template>
   <div class="calls-page">
-    <PageHeader title="来电查询" subtitle="查看设备当前活跃的 CS 呼叫，实时接收来电通知">
+    <PageHeader title="通话记录" subtitle="查看设备当前活跃的 CS 呼叫，实时接收来电通知">
       <template #actions>
         <div class="flex items-center gap-3">
           <el-select

@@ -51,7 +51,7 @@ const menuGroups = [
     items: [
       { index: '/devices', label: '设备管理', icon: Phone24Regular },
       { index: '/sms', label: '短信中心', icon: Mail24Regular },
-      { index: '/calls', label: '来电查询', icon: Call24Regular }
+      { index: '/calls', label: '通话记录', icon: Call24Regular }
     ]
   },
   {
