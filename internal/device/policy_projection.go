@@ -28,6 +28,7 @@ func applyPolicyToWorker(w *Worker, p cardpolicy.Policy) {
 	}
 	w.Config.APN = strings.TrimSpace(p.APN)
 	w.Config.SMSEnabled = true // SMS 恒开
+	w.Config.RequestSMSDeliveryReports = p.RequestSMSDeliveryReports
 	w.restoreNetworkAfterVoWiFi = p.NetworkEnabled
 }
 
@@ -53,6 +54,7 @@ func (p *Pool) resolveAndApplyPolicy(worker *Worker, reason string) policyApplyR
 		return policyApplyResult{ICCID: iccid, Reason: "resolve_failed"}
 	}
 	applyPolicyToWorker(worker, pol)
+	p.applySMSDeliveryReportsPolicy(worker, pol.RequestSMSDeliveryReports)
 	logger.Info("已投影卡策略", "device", worker.ID, "iccid", iccid,
 		"network", pol.NetworkEnabled, "vowifi", pol.VoWiFiEnabled,
 		"airplane", worker.Config.AirplaneEnabled, "reason", reason)

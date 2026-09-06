@@ -8,6 +8,7 @@ type PutCardPolicyRequest = {
   ip_version?: string
   apn?: string
   roaming_data_enabled?: boolean
+  request_sms_delivery_reports?: boolean
   quota_enabled?: boolean
   quota_bytes?: number
   billing_day?: number

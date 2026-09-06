@@ -17,24 +17,25 @@ import (
 //   - BillingTimezone:        计费时区（IANA 名或 UTC 偏移如 "+08:00"）。空串表示跟随系统时区。
 //   - AutoStopEnabled:        达到使用量阈值后是否自动关闭/拦截网络的开关。
 //   - AutoStopThresholdBytes: 触发自动关闭的「使用量阈值」（字节），与 QuotaBytes 独立。
-//                             通常略大于 QuotaBytes，留出漏记流量的余量。0 表示未设阈值。
+//     通常略大于 QuotaBytes，留出漏记流量的余量。0 表示未设阈值。
 type CardPolicy struct {
-	ICCID                string    `gorm:"column:iccid;primaryKey" json:"iccid"`
-	NetworkEnabled       bool      `gorm:"column:network_enabled" json:"network_enabled"`
-	VoWiFiEnabled        bool      `gorm:"column:vowifi_enabled" json:"vowifi_enabled"`
-	AirplaneEnabled      bool      `gorm:"column:airplane_enabled" json:"airplane_enabled"`
-	IPVersion            string    `gorm:"column:ip_version" json:"ip_version"`
-	APN                  string    `gorm:"column:apn" json:"apn"`
-	Source               string    `gorm:"column:source" json:"source"` // auto | user
-	RoamingDataEnabled   bool      `gorm:"column:roaming_data_enabled" json:"roaming_data_enabled"` // 漫游时是否允许开启蜂窝数据网络，默认关闭
-	QuotaEnabled         bool      `gorm:"column:quota_enabled" json:"quota_enabled"`
-	QuotaBytes           int64     `gorm:"column:quota_bytes" json:"quota_bytes"`
-	BillingDay           int       `gorm:"column:billing_day" json:"billing_day"`
-	BillingTimezone      string    `gorm:"column:billing_timezone" json:"billing_timezone"`
-	AutoStopEnabled      bool      `gorm:"column:auto_stop_enabled" json:"auto_stop_enabled"`
-	AutoStopThresholdBytes int64   `gorm:"column:auto_stop_threshold_bytes" json:"auto_stop_threshold_bytes"`
-	CreatedAt            time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt            time.Time `gorm:"column:updated_at" json:"updated_at"`
+	ICCID                     string    `gorm:"column:iccid;primaryKey" json:"iccid"`
+	NetworkEnabled            bool      `gorm:"column:network_enabled" json:"network_enabled"`
+	VoWiFiEnabled             bool      `gorm:"column:vowifi_enabled" json:"vowifi_enabled"`
+	AirplaneEnabled           bool      `gorm:"column:airplane_enabled" json:"airplane_enabled"`
+	IPVersion                 string    `gorm:"column:ip_version" json:"ip_version"`
+	APN                       string    `gorm:"column:apn" json:"apn"`
+	Source                    string    `gorm:"column:source" json:"source"`                                             // auto | user
+	RoamingDataEnabled        bool      `gorm:"column:roaming_data_enabled" json:"roaming_data_enabled"`                 // 漫游时是否允许开启蜂窝数据网络，默认关闭
+	RequestSMSDeliveryReports bool      `gorm:"column:request_sms_delivery_reports" json:"request_sms_delivery_reports"` // 发短信时是否默认请求送达报告（TP-SRR/+CDS），默认关闭
+	QuotaEnabled              bool      `gorm:"column:quota_enabled" json:"quota_enabled"`
+	QuotaBytes                int64     `gorm:"column:quota_bytes" json:"quota_bytes"`
+	BillingDay                int       `gorm:"column:billing_day" json:"billing_day"`
+	BillingTimezone           string    `gorm:"column:billing_timezone" json:"billing_timezone"`
+	AutoStopEnabled           bool      `gorm:"column:auto_stop_enabled" json:"auto_stop_enabled"`
+	AutoStopThresholdBytes    int64     `gorm:"column:auto_stop_threshold_bytes" json:"auto_stop_threshold_bytes"`
+	CreatedAt                 time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt                 time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (CardPolicy) TableName() string { return "card_policies" }
@@ -42,14 +43,15 @@ func (CardPolicy) TableName() string { return "card_policies" }
 // DefaultCardPolicy 是新卡自动建档用的硬编码安全默认（不落配置文件）。
 func DefaultCardPolicy(iccid string) CardPolicy {
 	return CardPolicy{
-		ICCID:           strings.TrimSpace(iccid),
-		NetworkEnabled:     false,
-		VoWiFiEnabled:      false,
-		AirplaneEnabled:    false,
-		IPVersion:          "v4",
-		APN:                "",
-		Source:             "auto",
-		RoamingDataEnabled: false, // 默认关闭：漫游时不开蜂窝数据
+		ICCID:                     strings.TrimSpace(iccid),
+		NetworkEnabled:            false,
+		VoWiFiEnabled:             false,
+		AirplaneEnabled:           false,
+		IPVersion:                 "v4",
+		APN:                       "",
+		Source:                    "auto",
+		RoamingDataEnabled:        false, // 默认关闭：漫游时不开蜂窝数据
+		RequestSMSDeliveryReports: false,
 	}
 }
 
@@ -119,20 +121,21 @@ func UpsertCardPolicy(p CardPolicy) error {
 	return DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "iccid"}},
 		DoUpdates: clause.Assignments(map[string]any{
-			"network_enabled":            p.NetworkEnabled,
-			"vowifi_enabled":             p.VoWiFiEnabled,
-			"airplane_enabled":           p.AirplaneEnabled,
-			"ip_version":                 p.IPVersion,
-			"apn":                        p.APN,
-			"source":                     p.Source,
-			"roaming_data_enabled":       p.RoamingDataEnabled,
-			"quota_enabled":              p.QuotaEnabled,
-			"quota_bytes":              p.QuotaBytes,
-			"billing_day":              p.BillingDay,
-			"billing_timezone":         p.BillingTimezone,
-			"auto_stop_enabled":        p.AutoStopEnabled,
-			"auto_stop_threshold_bytes": p.AutoStopThresholdBytes,
-			"updated_at":               p.UpdatedAt,
+			"network_enabled":              p.NetworkEnabled,
+			"vowifi_enabled":               p.VoWiFiEnabled,
+			"airplane_enabled":             p.AirplaneEnabled,
+			"ip_version":                   p.IPVersion,
+			"apn":                          p.APN,
+			"source":                       p.Source,
+			"roaming_data_enabled":         p.RoamingDataEnabled,
+			"request_sms_delivery_reports": p.RequestSMSDeliveryReports,
+			"quota_enabled":                p.QuotaEnabled,
+			"quota_bytes":                  p.QuotaBytes,
+			"billing_day":                  p.BillingDay,
+			"billing_timezone":             p.BillingTimezone,
+			"auto_stop_enabled":            p.AutoStopEnabled,
+			"auto_stop_threshold_bytes":    p.AutoStopThresholdBytes,
+			"updated_at":                   p.UpdatedAt,
 		}),
 	}).Create(&p).Error
 }

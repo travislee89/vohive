@@ -16,10 +16,10 @@ import (
 	"github.com/travislee89/vohive/internal/netprobe"
 	"github.com/travislee89/vohive/pkg/logger"
 
+	"github.com/miekg/dns"
 	qmimanager "github.com/travislee89/quectel-qmi-go/pkg/manager"
 	"github.com/travislee89/quectel-qmi-go/pkg/netcfg"
 	"github.com/travislee89/quectel-qmi-go/pkg/qmi"
-	"github.com/miekg/dns"
 )
 
 // 精选极速探测源
@@ -2060,6 +2060,24 @@ func (m *Manager) WMSDeleteMessagesByTag(ctx context.Context, storageType uint8,
 		return fmt.Errorf("qmi_manager_not_available")
 	}
 	return m.qmiMgr.WMSDeleteMessagesByTag(ctx, storageType, tag, mode)
+}
+
+// WMSSetRoutes 设置 WMS 短信路由表（含 TransferStatusReportToClient：是否把收到的
+// SMS-STATUS-REPORT（送达报告）转发给主机）。vendored quectel-qmi-go 内部会缓存该配置
+// 并在重连/恢复后自动重放，vohive 侧无需重复实现。
+func (m *Manager) WMSSetRoutes(ctx context.Context, routes []qmi.WMSRoute, transferStatusReportToClient bool) error {
+	if m == nil || m.qmiMgr == nil {
+		return fmt.Errorf("qmi_manager_not_available")
+	}
+	return m.qmiMgr.WMSSetRoutes(ctx, routes, transferStatusReportToClient)
+}
+
+// WMSGetRoutes 读取当前 WMS 短信路由表。
+func (m *Manager) WMSGetRoutes(ctx context.Context) (*qmi.WMSRouteConfig, error) {
+	if m == nil || m.qmiMgr == nil {
+		return nil, fmt.Errorf("qmi_manager_not_available")
+	}
+	return m.qmiMgr.WMSGetRoutes(ctx)
 }
 
 // --- VOICE Low-level Methods ---

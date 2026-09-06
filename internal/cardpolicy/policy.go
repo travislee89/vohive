@@ -2,19 +2,20 @@ package cardpolicy
 
 // Policy 是跟卡走的运行时策略快照（与 db.CardPolicy 字段对应，但不绑 gorm）。
 type Policy struct {
-	ICCID                  string
-	NetworkEnabled         bool
-	VoWiFiEnabled          bool
-	AirplaneEnabled        bool
-	IPVersion              string
-	APN                    string
-	RoamingDataEnabled     bool // 漫游时是否允许开启蜂窝数据网络，默认关闭
-	QuotaEnabled           bool
-	QuotaBytes             int64
-	BillingDay             int
-	BillingTimezone        string
-	AutoStopEnabled        bool
-	AutoStopThresholdBytes int64
+	ICCID                     string
+	NetworkEnabled            bool
+	VoWiFiEnabled             bool
+	AirplaneEnabled           bool
+	IPVersion                 string
+	APN                       string
+	RoamingDataEnabled        bool // 漫游时是否允许开启蜂窝数据网络，默认关闭
+	RequestSMSDeliveryReports bool // 发短信时是否默认请求送达报告（TP-SRR/+CDS），默认关闭
+	QuotaEnabled              bool
+	QuotaBytes                int64
+	BillingDay                int
+	BillingTimezone           string
+	AutoStopEnabled           bool
+	AutoStopThresholdBytes    int64
 }
 
 // Resolver 把 ICCID 解析为策略；缺失实现方负责按默认模板自动建档。

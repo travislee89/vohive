@@ -171,10 +171,12 @@ func (a *ATBackend) GetSMSC(ctx context.Context) (string, error) {
 // ============================================================================
 
 func (a *ATBackend) SendSMS(ctx context.Context, to, body string) error {
-	return a.SendSMSWithOptions(ctx, to, body, smscodec.SubmitOptions{})
+	_, err := a.SendSMSWithOptions(ctx, to, body, smscodec.SubmitOptions{})
+	return err
 }
 
-func (a *ATBackend) SendSMSWithOptions(ctx context.Context, to, body string, opts smscodec.SubmitOptions) error {
+// SendSMSWithOptions 返回值 mrs 是每个分片实际使用的 TP-MR（优先取模组回报的权威值）。
+func (a *ATBackend) SendSMSWithOptions(ctx context.Context, to, body string, opts smscodec.SubmitOptions) ([]byte, error) {
 	return a.modem.SendSMSWithOptions(to, body, opts)
 }
 

@@ -202,6 +202,14 @@ func (w *Worker) handleNewSMSRawQMI(info qmicore.RawSMSIndication) {
 
 	sms, err := qmimanager.DecodeIncomingSMSPDU(info.PDU, qmiSMSStorageUnknown, ^uint32(0))
 	if err != nil {
+		// quectel-qmi-go 的 DecodeIncomingSMSPDU 只认 TP-MTI=00 (SMS-DELIVER)，
+		// 会拒绝 TP-MTI=10 的 SMS-STATUS-REPORT（送达报告）。在这里用 vohive 自己的
+		// 解码逻辑兜底尝试一次，而不是把它当作单纯的解析失败丢弃。
+		if sr, ok := tryDecodeStatusReportQMI(info.PDU); ok {
+			w.handleIncomingStatusReport(sr, info.PDU)
+			w.ackRawSMSQMI(info, "status_report")
+			return
+		}
 		logger.Error(fmt.Sprintf("[%s] 解析原始短信失败 (QMI)", w.ID),
 			"pdu_len", len(info.PDU),
 			"pdu_hex", rawSMSPDUHexForLog(info.PDU),
@@ -216,6 +224,18 @@ func (w *Worker) handleNewSMSRawQMI(info qmicore.RawSMSIndication) {
 
 	w.processDecodedSMSQMI(sms)
 	w.ackRawSMSQMI(info, "processed")
+}
+
+// tryDecodeStatusReportQMI 尝试把 QMI 原始短信指示解码为 SMS-STATUS-REPORT，
+// 依次尝试"去掉 SMSC 前缀"和"原样"两种候选（与 quectel-qmi-go 对 deliver PDU 的候选策略一致）。
+func tryDecodeStatusReportQMI(pdu []byte) (smscodec.StatusReportInfo, bool) {
+	if info, ok, err := smscodec.DecodeStatusReportTPDU(smscodec.StripSMSCPrefix(pdu)); err == nil && ok {
+		return info, true
+	}
+	if info, ok, err := smscodec.DecodeStatusReportTPDU(pdu); err == nil && ok {
+		return info, true
+	}
+	return smscodec.StatusReportInfo{}, false
 }
 
 func (w *Worker) ackRawSMSQMI(info qmicore.RawSMSIndication, reason string) {
@@ -349,27 +369,49 @@ func (w *Worker) getPhoneNumberWithContext(ctx context.Context) string {
 }
 
 func (w *Worker) SendSMS(phone, message string) error {
-	return w.SendSMSWithOptions(phone, message, smscodec.SubmitOptions{})
+	_, err := w.SendSMSWithOptions(phone, message, smscodec.SubmitOptions{})
+	return err
 }
 
-func (w *Worker) SendSMSWithOptions(phone, message string, opts smscodec.SubmitOptions) error {
+// dbTPMRCounter 是一个跨调用持久化的 TP-MR 生成器（实现 tpdu.Counter：Count() int），
+// 请求送达报告时用它代替 smscodec 默认的、每次调用都从 1 开始的临时计数器，
+// 使 TP-MR 在进程重启后依旧不冲突，从而能与后续收到的状态报告正确关联。
+type dbTPMRCounter struct {
+	deviceID string
+}
+
+func (c dbTPMRCounter) Count() int {
+	n, err := db.NextTPMR(c.deviceID)
+	if err != nil {
+		logger.Warn("获取持久化 TP-MR 失败", "device", c.deviceID, "err", err)
+		return 1
+	}
+	return n
+}
+
+// SendSMSWithOptions 返回值 mrs 是每个分片实际使用的 TP-MR，仅在 opts.RequestStatusReport
+// 为 true 时有实际意义（供调用方登记 sms_status_reports 待确认记录）。
+func (w *Worker) SendSMSWithOptions(phone, message string, opts smscodec.SubmitOptions) ([]byte, error) {
+	if opts.RequestStatusReport && opts.MRGenerator == nil {
+		opts.MRGenerator = dbTPMRCounter{deviceID: w.ID}
+	}
 	if w.Backend != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 		defer cancel()
 		if sender, ok := w.Backend.(interface {
-			SendSMSWithOptions(context.Context, string, string, smscodec.SubmitOptions) error
+			SendSMSWithOptions(context.Context, string, string, smscodec.SubmitOptions) ([]byte, error)
 		}); ok {
 			return sender.SendSMSWithOptions(ctx, phone, message, opts)
 		}
 		if encoding, _ := smscodec.NormalizeSMSEncoding(string(opts.Encoding)); encoding != smscodec.SMSEncodingAuto {
-			return fmt.Errorf("设备 %s 的短信后端不支持编码选项: %s", w.ID, opts.Encoding)
+			return nil, fmt.Errorf("设备 %s 的短信后端不支持编码选项: %s", w.ID, opts.Encoding)
 		}
-		return w.Backend.SendSMS(ctx, phone, message)
+		return nil, w.Backend.SendSMS(ctx, phone, message)
 	}
 	if w.Modem != nil {
 		return w.Modem.SendSMSWithOptions(phone, message, opts)
 	}
-	return fmt.Errorf("设备 %s 无可用的短信发送后端", w.ID)
+	return nil, fmt.Errorf("设备 %s 无可用的短信发送后端", w.ID)
 }
 
 func (w *Worker) GetIMSI() string {

@@ -37,6 +37,23 @@ const (
 
 type SubmitOptions struct {
 	Encoding SMSEncoding
+
+	// RequestStatusReport 为 true 时在 TPDU 首字节置位 TP-SRR，请求网络返回 SMS-STATUS-REPORT（送达报告）。
+	RequestStatusReport bool
+
+	// MRGenerator 提供 TP-MR（TP-Message-Reference）的生成器；为 nil 时退化为每次调用从 1 开始的
+	// 临时计数器（与之前的行为一致，仅用于不关心 MR 唯一性的场景，例如不请求送达报告时）。
+	// 请求送达报告时调用方必须提供一个跨调用持久化的生成器（见 db.NextTPMR），否则无法用 TP-MR
+	// 关联后续收到的状态报告。
+	MRGenerator tpdu.Counter
+}
+
+// srrOption 是一个 tpdu.Option，用于在编码模板 TPDU 上置位 TP-SRR 标志位。
+type srrOption struct{}
+
+func (srrOption) ApplyTPDUOption(t *tpdu.TPDU) error {
+	t.FirstOctet |= tpdu.FoSRR
+	return nil
 }
 
 func NormalizeSMSEncoding(raw string) (SMSEncoding, error) {
@@ -384,6 +401,55 @@ func DecodeDeliverTPDU(tpduBytes []byte) (sender string, text string, ts time.Ti
 	return "", textStr, time.Time{}, concat, nil
 }
 
+// StatusReportInfo 是从 SMS-STATUS-REPORT TPDU 中提取出的送达报告信息。
+type StatusReportInfo struct {
+	MR          byte      // TP-MR，与发送时分配的 TP-MR 对应，用于关联原始短信
+	RA          string    // TP-RA，收件人号码（回执来源）
+	SCTS        time.Time // TP-SCTS，原短信提交时间
+	DischargeAt time.Time // TP-DT，网络/终端处理完成时间
+	Status      byte      // TP-Status，投递结果原始字节，参见 3GPP TS 23.040 §9.2.3.15
+}
+
+// LooksLikeStatusReportTPDU 通过 TP-MTI（首字节低 2 位 == 0b10）快速判断一个原始 TPDU
+// 是否可能是 SMS-STATUS-REPORT，用于在尝试完整解码前先做一次廉价的分流判断。
+func LooksLikeStatusReportTPDU(tpduBytes []byte) bool {
+	return len(tpduBytes) > 0 && tpduBytes[0]&0x03 == 0x02
+}
+
+// DecodeStatusReportTPDU 尝试把原始 TPDU 解码为 SMS-STATUS-REPORT。
+// ok 为 false（而非返回 err）表示该 TPDU 解析成功但并非状态报告类型，调用方可据此
+// 尝试其他解码路径（例如 DecodeDeliverTPDU）而不必将其当作错误处理。
+func DecodeStatusReportTPDU(tpduBytes []byte) (info StatusReportInfo, ok bool, err error) {
+	t, err := smspdu.Unmarshal(tpduBytes)
+	if err != nil {
+		return StatusReportInfo{}, false, err
+	}
+	if t.SmsType() != tpdu.SmsStatusReport {
+		return StatusReportInfo{}, false, nil
+	}
+	return StatusReportInfo{
+		MR:          t.MR,
+		RA:          t.RA.Number(),
+		SCTS:        t.SCTS.Time,
+		DischargeAt: t.DT.Time,
+		Status:      t.ST,
+	}, true, nil
+}
+
+// StripSMSCPrefix 去掉 QMI/AT/MBIM 原始 SMS 指示中可能携带的 SMSC 地址前缀
+// （Length + Type + BCD），返回不含 SMSC 前缀的 TPDU 字节。逻辑与 Manager.decodePDU
+// 中久经验证的跳过方式保持一致。
+func StripSMSCPrefix(raw []byte) []byte {
+	if len(raw) == 0 {
+		return raw
+	}
+	smscLen := int(raw[0])
+	if len(raw) > smscLen+1 {
+		return raw[smscLen+1:]
+	}
+	return raw
+}
+
 // IsShortCode 判断号码是否为运营商短号码/服务号码（非标准手机号）
 // 短号码特征：无 + 前缀、长度 <= 6 位、纯数字
 func IsShortCode(phone string) bool {
@@ -397,34 +463,43 @@ func IsShortCode(phone string) bool {
 // BuildSubmitTPDUs 编码上行短信为一组 SUBMIT TPDU（支持长短信切片）。
 // 返回 TPDU 字节数组列表 和 对应的长度列表（不含 SMSC），以及可能的错误。
 func BuildSubmitTPDUs(to, text string) ([][]byte, []int, error) {
-	return BuildSubmitTPDUsWithOptions(to, text, SubmitOptions{})
+	bytesList, lenList, _, err := BuildSubmitTPDUsWithOptions(to, text, SubmitOptions{})
+	return bytesList, lenList, err
 }
 
 // BuildSubmitTPDUsWithOptions 编码上行短信为一组 SUBMIT TPDU，并允许调用方指定文本编码策略。
-func BuildSubmitTPDUsWithOptions(to, text string, opts SubmitOptions) ([][]byte, []int, error) {
+// 第三个返回值 mrs 是每个分片实际使用的 TP-MR（与 bytesList 一一对应），用于请求送达报告时
+// 与后续收到的 SMS-STATUS-REPORT 做关联。
+func BuildSubmitTPDUsWithOptions(to, text string, opts SubmitOptions) (bytesList [][]byte, lenList []int, mrs []byte, err error) {
 	normalizedTo := strings.TrimSpace(to)
 	encoding, err := NormalizeSMSEncoding(string(opts.Encoding))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	msg := []byte(text)
-	encoderOptions := []smspdu.EncoderOption{smspdu.To(normalizedTo)}
+	// smspdu.Encode() 内部会 prepend AsSubmit，这里手动构造 Encoder 是为了能覆盖 MsgCount
+	// （TP-MR 生成器），所以需要自己带上 AsSubmit。
+	encoderOptions := []smspdu.EncoderOption{smspdu.AsSubmit, smspdu.To(normalizedTo)}
 	if encoding == SMSEncodingUCS2 {
 		msg = ucs2.Encode([]rune(text))
 		encoderOptions = append(encoderOptions, smspdu.AsUCS2)
 	}
+	if opts.RequestStatusReport {
+		encoderOptions = append(encoderOptions, smspdu.WithTemplateOption(srrOption{}))
+	}
 
-	tpdus, err := smspdu.Encode(msg, encoderOptions...)
+	enc := smspdu.NewEncoder(encoderOptions...)
+	if opts.MRGenerator != nil {
+		enc.MsgCount = opts.MRGenerator
+	}
+	tpdus, err := enc.Encode(msg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if len(tpdus) == 0 {
-		return nil, nil, errors.New("TPDU 编码结果为空")
+		return nil, nil, nil, errors.New("TPDU 编码结果为空")
 	}
-
-	var bytesList [][]byte
-	var lenList []int
 
 	for _, pdu := range tpdus {
 		// 修复短号码地址类型：库默认将所有号码设为 TonInternational (0x91)，
@@ -438,11 +513,12 @@ func BuildSubmitTPDUsWithOptions(to, text string, opts SubmitOptions) ([][]byte,
 
 		b, err := pdu.MarshalBinary()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		bytesList = append(bytesList, b)
 		lenList = append(lenList, len(b))
+		mrs = append(mrs, pdu.MR)
 	}
 
-	return bytesList, lenList, nil
+	return bytesList, lenList, mrs, nil
 }

@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuildSubmitTPDUsWithOptionsForcesUCS2(t *testing.T) {
-	tpdus, _, err := BuildSubmitTPDUsWithOptions("10086", "hello", SubmitOptions{Encoding: SMSEncodingUCS2})
+	tpdus, _, _, err := BuildSubmitTPDUsWithOptions("10086", "hello", SubmitOptions{Encoding: SMSEncodingUCS2})
 	if err != nil {
 		t.Fatalf("BuildSubmitTPDUsWithOptions() error = %v", err)
 	}

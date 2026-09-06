@@ -7,7 +7,8 @@ import { useSMSStore } from '../stores/sms'
 import { useNotificationsStore } from '../stores/notifications'
 import { usePollingScheduler } from '../composables/usePollingScheduler'
 import { toAppError } from '../services/http'
-import type { SmsThreadQueryParams } from '../services/sms'
+import { smsService } from '../services/sms'
+import type { SmsStatusReport, SmsThreadQueryParams } from '../services/sms'
 import PageHeader from '../components/PageHeader.vue'
 import EmptyState from '../components/EmptyState.vue'
 import ErrorState from '../components/ErrorState.vue'
@@ -190,12 +191,39 @@ const composerInput = ref<unknown>(null)
 const sendForm = ref({
   device_id: '',
   phone: '',
-  message: ''
+  message: '',
+  requestDeliveryReport: false
 })
 const sendEstimate = computed(() => estimateSegments(String(sendForm.value.message || '')))
 
 const selectedSendDeviceId = ref('')
 const sendDeviceOptions = computed(() => devices.value.map(d => ({ label: `${d.name || d.id}`, value: d.id })))
+
+// 送达报告（TP-SRR）短轮询状态：key 为 db.SMS.ID，value 为最近一次查到的报告。
+const deliveryReports = ref<Map<number, SmsStatusReport>>(new Map())
+const deliveryReportLabels: Record<SmsStatusReport['state'], string> = {
+  pending: '送达报告：待确认',
+  forwarding: '送达报告：投递中',
+  delivered: '送达报告：已送达',
+  failed: '送达报告：投递失败',
+  timeout: '送达报告：超时未回执'
+}
+
+function pollDeliveryReport(smsId: number, attemptsLeft = 8) {
+  if (!smsId || attemptsLeft <= 0) return
+  setTimeout(async () => {
+    const result = await smsService.getStatusReport(smsId)
+    if (result.ok) {
+      deliveryReports.value.set(smsId, result.data)
+      deliveryReports.value = new Map(deliveryReports.value)
+      if (result.data.state === 'pending' || result.data.state === 'forwarding') {
+        pollDeliveryReport(smsId, attemptsLeft - 1)
+      }
+    } else {
+      pollDeliveryReport(smsId, attemptsLeft - 1)
+    }
+  }, 3000)
+}
 
 const deviceSidebarItems = computed(() => {
   return [
@@ -595,6 +623,7 @@ onUnmounted(() => {
 function openSendModal() {
   sendForm.value.phone = ''
   sendForm.value.message = ''
+  sendForm.value.requestDeliveryReport = false
   selectedSendDeviceId.value = selectedDevice.value !== 'all' ? selectedDevice.value : (devices.value[0]?.id || '')
   showSendModal.value = true
 }
@@ -609,11 +638,15 @@ async function handleSendModal() {
     const result = await smsStore.send({
       device_id: selectedSendDeviceId.value,
       phone: sendForm.value.phone,
-      message: sendForm.value.message
+      message: sendForm.value.message,
+      request_delivery_report: sendForm.value.requestDeliveryReport
     })
     if (!result.ok) throw new Error(result.error.message || '发送失败')
     const parts = result.data.partsTotal
     ElMessage.success(`短信已发送${parts > 1 ? `（${parts}段）` : ''}`)
+    if (result.data.requestedDeliveryReport && result.data.smsId) {
+      pollDeliveryReport(result.data.smsId)
+    }
     showSendModal.value = false
     setTimeout(async () => {
       await fetchMessagesAndThread()
@@ -985,6 +1018,18 @@ async function confirmDeleteThread(thread: SmsThread) {
                       <span class="text-[11px] text-gray-400 font-mono">{{ formatISODateTime(m.timestamp) }}</span>
                       <span v-if="m.type === 2 && m.status === 2" class="text-green-500 text-xs" title="发送成功">✓</span>
                       <span v-else-if="m.type === 2 && m.status === 3" class="text-red-500 text-xs" title="发送失败">✗</span>
+                      <span
+                        v-if="m.type === 2 && deliveryReports.has(m.id)"
+                        class="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                        :class="{
+                          'text-blue-500 bg-blue-50 dark:bg-blue-900/20': ['pending', 'forwarding'].includes(deliveryReports.get(m.id)!.state),
+                          'text-green-500 bg-green-50 dark:bg-green-900/20': deliveryReports.get(m.id)!.state === 'delivered',
+                          'text-red-500 bg-red-50 dark:bg-red-900/20': ['failed', 'timeout'].includes(deliveryReports.get(m.id)!.state)
+                        }"
+                        :title="deliveryReportLabels[deliveryReports.get(m.id)!.state]"
+                      >
+                        {{ deliveryReportLabels[deliveryReports.get(m.id)!.state] }}
+                      </span>
                       <el-popover
                         v-if="m.type === 1 && m.forward_status"
                         trigger="click"
@@ -1109,6 +1154,9 @@ async function confirmDeleteThread(thread: SmsThread) {
           <div class="mt-2 text-xs flex justify-end text-gray-400">
             {{ sendEstimate.encoding }} · 预计 {{ sendEstimate.parts }} 段 · {{ Array.from(String(sendForm.message || '')).length }} 字
           </div>
+        </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="sendForm.requestDeliveryReport">请求送达报告（需运营商与模组支持）</el-checkbox>
         </el-form-item>
       </el-form>
       <template #footer>

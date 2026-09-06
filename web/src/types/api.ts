@@ -419,6 +419,7 @@ export type CardPolicy = {
   apn: string
   source: 'auto' | 'user'
   roaming_data_enabled: boolean
+  request_sms_delivery_reports: boolean
   updated_at?: string
   quota_enabled: boolean
   quota_bytes: number

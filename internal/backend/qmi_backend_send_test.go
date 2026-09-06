@@ -1032,7 +1032,7 @@ func TestQMIBackendSendSMSWithOptionsForcesUCS2(t *testing.T) {
 		t.Fatalf("NewQMIBackend failed: %v", err)
 	}
 
-	if err := backend.SendSMSWithOptions(context.Background(), "10086", "hello", smscodec.SubmitOptions{Encoding: smscodec.SMSEncodingUCS2}); err != nil {
+	if _, err := backend.SendSMSWithOptions(context.Background(), "10086", "hello", smscodec.SubmitOptions{Encoding: smscodec.SMSEncodingUCS2}); err != nil {
 		t.Fatalf("SendSMSWithOptions failed: %v", err)
 	}
 	if src.sendCount != 1 {

@@ -10,25 +10,32 @@ import (
 )
 
 func (b *MBIMBackend) SendSMS(ctx context.Context, to, body string) error {
-	return b.SendSMSWithOptions(ctx, to, body, smscodec.SubmitOptions{})
+	_, err := b.SendSMSWithOptions(ctx, to, body, smscodec.SubmitOptions{})
+	return err
 }
 
-func (b *MBIMBackend) SendSMSWithOptions(ctx context.Context, to, body string, opts smscodec.SubmitOptions) error {
-	tpdus, _, err := smscodec.BuildSubmitTPDUsWithOptions(to, body, opts)
+// SendSMSWithOptions 返回值 mrs 是每个分片实际使用的 TP-MR：优先取 MBIM SendSMS 回报的
+// 权威网络消息引用，取不到时退回本地编码时分配的 MR。
+func (b *MBIMBackend) SendSMSWithOptions(ctx context.Context, to, body string, opts smscodec.SubmitOptions) ([]byte, error) {
+	tpdus, _, localMRs, err := smscodec.BuildSubmitTPDUsWithOptions(to, body, opts)
 	if err != nil {
-		return fmt.Errorf("PDU 编码失败: %w", err)
+		return nil, fmt.Errorf("PDU 编码失败: %w", err)
 	}
 	if len(tpdus) == 0 {
-		return fmt.Errorf("PDU 编码结果为空")
+		return nil, fmt.Errorf("PDU 编码结果为空")
 	}
+	mrs := make([]byte, len(tpdus))
+	copy(mrs, localMRs)
 	for i, tpdu := range tpdus {
 		pdu := append([]byte{0x00}, tpdu...)
-		if _, err := b.source.SendSMS(ctx, pdu); err != nil {
-			return fmt.Errorf("发送第 %d/%d 段失败: %w", i+1, len(tpdus), err)
+		mr, err := b.source.SendSMS(ctx, pdu)
+		if err != nil {
+			return nil, fmt.Errorf("发送第 %d/%d 段失败: %w", i+1, len(tpdus), err)
 		}
+		mrs[i] = byte(mr)
 	}
 	logger.Info("MBIM 短信发送成功", "to", to, "parts", len(tpdus))
-	return nil
+	return mrs, nil
 }
 
 func (b *MBIMBackend) ReadSMS(ctx context.Context, index int) (*SMS, error) {

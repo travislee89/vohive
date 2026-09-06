@@ -454,7 +454,7 @@ func TestMBIMBackendSendSMSWithOptionsForcesUCS2(t *testing.T) {
 	src := &fakeMBIMSource{}
 	src.sendFn = func(pdu []byte) (uint32, error) { sent = append(sent, pdu); return 1, nil }
 	b := NewMBIMBackend("", src)
-	if err := b.SendSMSWithOptions(context.Background(), "10086", "hello", smscodec.SubmitOptions{Encoding: smscodec.SMSEncodingUCS2}); err != nil {
+	if _, err := b.SendSMSWithOptions(context.Background(), "10086", "hello", smscodec.SubmitOptions{Encoding: smscodec.SMSEncodingUCS2}); err != nil {
 		t.Fatalf("SendSMSWithOptions: %v", err)
 	}
 	if len(sent) != 1 {
