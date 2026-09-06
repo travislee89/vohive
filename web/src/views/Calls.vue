@@ -12,11 +12,13 @@ import { useEventStream } from '../composables/useEventStream'
 import { callsService } from '../services/calls'
 import { toAppError } from '../services/http'
 import { api } from '../stores/auth'
-import type { CSCallEvent, CSCallInfo, CSCallListResponse, DeviceMgmtListItem } from '../types/api'
-import { formatISOTime } from '../utils/datetime'
+import { useNotificationsStore } from '../stores/notifications'
+import type { CallLog, CSCallEvent, CSCallInfo, CSCallListResponse, DeviceMgmtListItem } from '../types/api'
+import { formatISODateTime, formatISOTime } from '../utils/datetime'
 
 const route = useRoute()
 const router = useRouter()
+const notifications = useNotificationsStore()
 
 const devices = ref<DeviceMgmtListItem[]>([])
 const devicesError = ref<{ message: string; status?: number; method?: string; url?: string; hint?: string } | null>(null)
@@ -26,6 +28,25 @@ const loading = ref(false)
 const calls = ref<CSCallInfo[]>([])
 const callsError = ref<{ message: string; status?: number; method?: string; url?: string; hint?: string } | null>(null)
 const lastOkAt = ref<number | null>(null)
+
+const history = ref<CallLog[]>([])
+const historyLoading = ref(false)
+const historyError = ref<{ message: string; status?: number; method?: string; url?: string; hint?: string } | null>(null)
+const highlightCallId = ref<string>(typeof route.query.callId === 'string' ? route.query.callId : '')
+
+const outcomeText: Record<string, string> = {
+  ringing: '振铃中',
+  answered: '已接听',
+  missed: '未接听'
+}
+
+function outcomeTagType(outcome: string) {
+  switch (outcome) {
+    case 'answered': return 'success'
+    case 'missed': return 'danger'
+    default: return 'info'
+  }
+}
 
 // 实时来电事件流
 let eventStream: ReturnType<typeof useEventStream<CSCallEvent>> | null = null
@@ -102,6 +123,33 @@ async function fetchCalls(silent = false) {
   if (!silent) loading.value = false
 }
 
+async function fetchHistory() {
+  if (!selectedDevice.value) {
+    history.value = []
+    return
+  }
+  historyLoading.value = true
+  historyError.value = null
+  const result = await callsService.listHistory(selectedDevice.value)
+  if (result.ok) {
+    history.value = result.data.logs
+  } else {
+    historyError.value = result.error
+  }
+  historyLoading.value = false
+}
+
+async function markCallsReadForCurrentDevice() {
+  if (!selectedDevice.value) return
+  if (highlightCallId.value) {
+    const id = Number(highlightCallId.value)
+    if (Number.isFinite(id)) await notifications.markCallRead(id)
+    highlightCallId.value = ''
+  } else {
+    await notifications.markDeviceCallsRead(selectedDevice.value)
+  }
+}
+
 function connectEventStream() {
   eventStream?.disconnect()
   if (!selectedDevice.value) return
@@ -121,6 +169,7 @@ function connectEventStream() {
         })
       }
       void fetchCalls(true)
+      if (data.type === 'hangup') void fetchHistory()
     },
     onRawEvent: (eventName: string, payload: string) => {
       if (eventName === 'cscall_snapshot') {
@@ -147,9 +196,11 @@ function disconnectEventStream() {
 }
 
 function handleDeviceChange() {
+  highlightCallId.value = ''
   void router.replace({ query: selectedDevice.value ? { device: selectedDevice.value } : {} })
   calls.value = []
   void fetchCalls()
+  void fetchHistory().then(markCallsReadForCurrentDevice)
   connectEventStream()
 }
 
@@ -157,6 +208,8 @@ onMounted(async () => {
   await fetchDevices()
   if (selectedDevice.value) {
     await fetchCalls()
+    await fetchHistory()
+    await markCallsReadForCurrentDevice()
     connectEventStream()
   }
 })
@@ -265,6 +318,57 @@ onUnmounted(() => {
             </div>
             <div class="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {{ directionText[call.direction] || call.direction }} · ID: {{ call.id }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-8">
+        <h3 class="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-3">最近通话记录</h3>
+
+        <div v-if="historyError" class="mb-4">
+          <ErrorState
+            :message="historyError.message"
+            :hint="historyError.hint"
+            @retry="fetchHistory()"
+          />
+        </div>
+
+        <div v-if="historyLoading && history.length === 0">
+          <ListSkeleton :rows="3" />
+        </div>
+
+        <EmptyState
+          v-else-if="history.length === 0"
+          title="暂无通话记录"
+          description="该设备尚无历史来电或去电记录"
+        />
+
+        <div v-else class="grid gap-2">
+          <div
+            v-for="log in history"
+            :key="log.id"
+            class="ui-glass-border rounded-xl p-3 flex items-center gap-4"
+            :class="String(log.id) === highlightCallId ? 'ring-2 ring-cyan-400' : ''"
+          >
+            <div
+              class="flex h-9 w-9 items-center justify-center rounded-full"
+              :class="log.direction === 'in' ? 'bg-amber-500/15 text-amber-500' : 'bg-sky-500/15 text-sky-500'"
+            >
+              <component :is="directionIcon(log.direction)" class="h-4 w-4" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-medium text-gray-800 dark:text-gray-100">
+                  {{ log.number || '未知号码' }}
+                </span>
+                <el-tag :type="outcomeTagType(log.outcome)" size="small">
+                  {{ outcomeText[log.outcome] || log.outcome }}
+                </el-tag>
+              </div>
+              <div class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ directionText[log.direction] || log.direction }} · {{ formatISODateTime(log.started_at) }}
+              </div>
             </div>
           </div>
         </div>
