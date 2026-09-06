@@ -121,6 +121,11 @@ type Manager struct {
 	connectCallback func()              // CONNECT/OK URC 回调 (对方接听外呼)
 	qpcmvChan       chan int            // +QPCMV URC 流控通道 (0=忙, 1=就绪)
 
+	// +CDS 送达报告回调；pendingCDS 只在 runLoop 单一 goroutine 内读写（handleCommand 也是被
+	// runLoop 同步调用，不会与之并发），因此不需要额外加锁。
+	statusReportHandler func(smscodec.StatusReportInfo, []byte)
+	pendingCDS          bool
+
 	reassembler *smscodec.Reassembler
 
 	// SIM 卡低频巡检告警状态
@@ -320,6 +325,15 @@ func (m *Manager) SetSMSCallback(cb SMSCallback) {
 func (m *Manager) SetNewSMSHandler(handler func(index string)) {
 	m.infoMu.Lock()
 	m.newSMSHandler = handler
+	m.infoMu.Unlock()
+}
+
+// SetStatusReportHandler 设置 +CDS 送达报告（SMS-STATUS-REPORT）回调，第二个参数是原始 PDU
+// 字节（含 SMSC 前缀，若有），供调用方留档。仅当 AT+CNMI 的 <ds> 参数被设为非 0
+// （见 SetSMSDeliveryReportsEnabled）时，模组才会发出 +CDS。
+func (m *Manager) SetStatusReportHandler(handler func(smscodec.StatusReportInfo, []byte)) {
+	m.infoMu.Lock()
+	m.statusReportHandler = handler
 	m.infoMu.Unlock()
 }
 
@@ -636,6 +650,9 @@ func (m *Manager) runLoop() {
 				m.notifyDisconnect("serial_read_error")
 				return
 			}
+			if m.tryConsumeCDSContinuation(msg.Data) {
+				continue
+			}
 			if m.isURC(msg.Data) {
 				m.handleURC(msg.Data)
 			}
@@ -680,6 +697,10 @@ RespLoop:
 			}
 
 			line := msg.Data
+
+			if m.tryConsumeCDSContinuation(line) {
+				continue
+			}
 
 			if line == "OK" {
 				m.resetATTimeoutWatchdog()
@@ -732,7 +753,7 @@ RespLoop:
 				isPureAsyncURC := func(s string) bool {
 					key := urcKey(s)
 					switch key {
-					case "+CUSD", "+CMTI", "RING", "+CLIP", "+QSIMSTAT", "+QSTKURC", "+QPCMV":
+					case "+CUSD", "+CMTI", "RING", "+CLIP", "+QSIMSTAT", "+QSTKURC", "+QPCMV", "+CDS":
 						return true
 					}
 					return false
@@ -879,6 +900,12 @@ func (m *Manager) initModem() {
 		// 这些初始化命令使用 ExecuteATSilent 降低日志噪音，避免用户误解全在走 AT
 		m.ExecuteATSilent(cmd, 2*time.Second)
 		time.Sleep(100 * time.Millisecond)
+	}
+
+	// InitCommands 里的 AT+CNMI 固定禁用 <ds>（送达报告上报），这里按设备策略决定的
+	// RequestSMSDeliveryReports 覆盖一次。
+	if m.cfg.RequestSMSDeliveryReports {
+		m.SetSMSDeliveryReportsEnabled(true)
 	}
 
 	m.markReady()
@@ -1301,6 +1328,47 @@ func (m *Manager) dispatchSIMStatusURC(inserted *bool, state string) {
 	}
 }
 
+// tryConsumeCDSContinuation 处理 +CDS 两行 URC 的第二行（裸十六进制 PDU，无 +/^/$ 前缀，
+// 因此不会被 isURC 识别）。仅当上一行是 "+CDS: <len>" 时才会消费本行。
+// 返回 true 表示该行已被作为 CDS PDU 消费，调用方不应再按普通行/URC 继续处理。
+func (m *Manager) tryConsumeCDSContinuation(line string) bool {
+	if !m.pendingCDS {
+		return false
+	}
+	m.pendingCDS = false
+
+	s := strings.TrimSpace(line)
+	pduBytes, err := hex.DecodeString(s)
+	if err != nil {
+		logger.Warn(fmt.Sprintf("[%s] +CDS PDU 十六进制解析失败", m.cfg.ID), "raw", s, "err", err)
+		return true
+	}
+
+	info, ok, err := smscodec.DecodeStatusReportTPDU(smscodec.StripSMSCPrefix(pduBytes))
+	if (err != nil || !ok) && len(pduBytes) > 0 {
+		// 部分模组在 +CDS 中给出的是不带 SMSC 前缀的裸 TPDU，两种候选都尝试一次。
+		if info2, ok2, err2 := smscodec.DecodeStatusReportTPDU(pduBytes); ok2 {
+			info, ok, err = info2, ok2, err2
+		}
+	}
+	if err != nil {
+		logger.Warn(fmt.Sprintf("[%s] +CDS TPDU 解码失败", m.cfg.ID), "raw", s, "err", err)
+		return true
+	}
+	if !ok {
+		logger.Warn(fmt.Sprintf("[%s] +CDS 载荷不是合法的 SMS-STATUS-REPORT", m.cfg.ID), "raw", s)
+		return true
+	}
+
+	m.infoMu.RLock()
+	handler := m.statusReportHandler
+	m.infoMu.RUnlock()
+	if handler != nil {
+		go handler(info, pduBytes)
+	}
+	return true
+}
+
 // handleURC 处理 URC
 func (m *Manager) handleURC(line string) {
 	s := strings.TrimSpace(line)
@@ -1375,6 +1443,12 @@ func (m *Manager) handleURC(line string) {
 			// 没有人在等待，丢弃
 			logger.Debug(fmt.Sprintf("[%s] USSD 响应无人等待，已丢弃", m.cfg.ID), "text", result.Text)
 		}
+	}
+
+	if fr.Key == "+CDS" {
+		// +CDS 是两行 URC："+CDS: <len>" 紧跟一行裸十六进制 PDU，PDU 行会在下一次读到时
+		// 由 tryConsumeCDSContinuation 消费。
+		m.pendingCDS = true
 	}
 
 	if fr.Key == "+CMTI" && fr.CMTIIndex != "" {
@@ -1966,13 +2040,27 @@ func (m *Manager) DeleteSMS(index uint32) error {
 	return err
 }
 
+// SetSMSDeliveryReportsEnabled 动态开关 AT+CNMI 的 <ds> 参数，控制模组是否用 +CDS 上报
+// SMS-STATUS-REPORT（送达报告）。默认（enabled=false）时 <ds>=0，与该项目一贯行为一致。
+func (m *Manager) SetSMSDeliveryReportsEnabled(enabled bool) error {
+	ds := 0
+	if enabled {
+		ds = 1
+	}
+	_, err := m.ExecuteATSilent(fmt.Sprintf("AT+CNMI=2,1,0,%d,0", ds), 3*time.Second)
+	return err
+}
+
 // SendSMS 使用 PDU 模式发送短信
 func (m *Manager) SendSMS(phone, message string) error {
-	return m.SendSMSWithOptions(phone, message, smscodec.SubmitOptions{})
+	_, err := m.SendSMSWithOptions(phone, message, smscodec.SubmitOptions{})
+	return err
 }
 
 // SendSMSWithOptions 使用 PDU 模式发送短信，并允许调用方指定文本编码策略。
-func (m *Manager) SendSMSWithOptions(phone, message string, opts smscodec.SubmitOptions) error {
+// 返回值 mrs 是每个分片实际使用的 TP-MR：优先取模组在 "+CMGS: <mr>" 响应中回报的权威值，
+// 取不到时退回本地编码时分配的 MR（见 smscodec.SubmitOptions.MRGenerator）。
+func (m *Manager) SendSMSWithOptions(phone, message string, opts smscodec.SubmitOptions) (mrs []byte, err error) {
 	m.SetBusy(true)
 	defer m.SetBusy(false)
 
@@ -1980,14 +2068,17 @@ func (m *Manager) SendSMSWithOptions(phone, message string, opts smscodec.Submit
 
 	// 确保处于 PDU 模式
 	if _, err := m.ExecuteATHigh("AT+CMGF=0", 3*time.Second); err != nil {
-		return fmt.Errorf("设置 PDU 模式失败: %w", err)
+		return nil, fmt.Errorf("设置 PDU 模式失败: %w", err)
 	}
 
 	// 构建 PDUs
-	pduHexList, tpduLenList, err := m.buildSMSPDUsWithOptions(phone, message, opts)
+	pduHexList, tpduLenList, localMRs, err := m.buildSMSPDUsWithOptions(phone, message, opts)
 	if err != nil {
-		return fmt.Errorf("构建 PDU 失败: %w", err)
+		return nil, fmt.Errorf("构建 PDU 失败: %w", err)
 	}
+
+	reportedMRs := make([]byte, len(pduHexList))
+	copy(reportedMRs, localMRs)
 
 	for i, pduHex := range pduHexList {
 		tpduLen := tpduLenList[i]
@@ -2008,19 +2099,22 @@ func (m *Manager) SendSMSWithOptions(phone, message string, opts smscodec.Submit
 		select {
 		case m.cmdChanHigh <- req:
 		case <-time.After(5 * time.Second):
-			return errors.New("command queue full")
+			return nil, errors.New("command queue full")
 		}
 
 		// 等待最终响应 (OK)
 		select {
 		case resp := <-req.respChan:
 			if !strings.Contains(resp, "OK") && !strings.Contains(resp, "+CMGS:") {
-				return fmt.Errorf("发送分片 %d 失败: %s", i+1, resp)
+				return nil, fmt.Errorf("发送分片 %d 失败: %s", i+1, resp)
+			}
+			if mr, ok := parseCMGSResponse(resp); ok {
+				reportedMRs[i] = mr
 			}
 		case err := <-req.errChan:
-			return fmt.Errorf("发送分片 %d 失败: %w", i+1, err)
+			return nil, fmt.Errorf("发送分片 %d 失败: %w", i+1, err)
 		case <-time.After(20 * time.Second):
-			return errors.New("发送超时")
+			return nil, errors.New("发送超时")
 		}
 
 		// 稍微等待下一段发信，防止模组队列溢出
@@ -2030,19 +2124,40 @@ func (m *Manager) SendSMSWithOptions(phone, message string, opts smscodec.Submit
 	}
 
 	logger.Info(fmt.Sprintf("[%s] 短信已发送", m.cfg.ID))
-	return nil
+	return reportedMRs, nil
+}
+
+// parseCMGSResponse 从 "+CMGS: <mr>" 响应行中解析出模组回报的权威 TP-MR。
+func parseCMGSResponse(resp string) (byte, bool) {
+	idx := strings.Index(resp, "+CMGS:")
+	if idx < 0 {
+		return 0, false
+	}
+	rest := strings.TrimSpace(resp[idx+len("+CMGS:"):])
+	end := 0
+	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(rest[:end])
+	if err != nil || n < 0 || n > 255 {
+		return 0, false
+	}
+	return byte(n), true
 }
 
 // buildSMSPDUs 构建多段 SMS-SUBMIT PDU
-// 返回: PDU 十六进制字符串列表, TPDU 长度列表 (不含 SMSC), 错误
-func (m *Manager) buildSMSPDUs(phone, message string) ([]string, []int, error) {
+// 返回: PDU 十六进制字符串列表, TPDU 长度列表 (不含 SMSC), 每段本地分配的 TP-MR, 错误
+func (m *Manager) buildSMSPDUs(phone, message string) ([]string, []int, []byte, error) {
 	return m.buildSMSPDUsWithOptions(phone, message, smscodec.SubmitOptions{})
 }
 
-func (m *Manager) buildSMSPDUsWithOptions(phone, message string, opts smscodec.SubmitOptions) ([]string, []int, error) {
-	tpduBytesList, tpduLenList, err := smscodec.BuildSubmitTPDUsWithOptions(phone, message, opts)
+func (m *Manager) buildSMSPDUsWithOptions(phone, message string, opts smscodec.SubmitOptions) ([]string, []int, []byte, error) {
+	tpduBytesList, tpduLenList, mrs, err := smscodec.BuildSubmitTPDUsWithOptions(phone, message, opts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("PDU 编码失败: %w", err)
+		return nil, nil, nil, fmt.Errorf("PDU 编码失败: %w", err)
 	}
 
 	// SMSC 使用默认 (长度字节为 00)
@@ -2058,7 +2173,7 @@ func (m *Manager) buildSMSPDUsWithOptions(phone, message string, opts smscodec.S
 		pduHexList = append(pduHexList, pduHex)
 	}
 
-	return pduHexList, tpduLenList, nil
+	return pduHexList, tpduLenList, mrs, nil
 }
 
 // USSDResult USSD 会话响应结果

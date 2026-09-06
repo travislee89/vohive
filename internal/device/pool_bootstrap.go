@@ -564,6 +564,7 @@ func (p *Pool) AddWorkerFromConfig(devCfg config.DeviceConfig) (*Worker, error) 
 				w.handleNewSMSRawQMI(info)
 			})
 		}
+		p.applyQMIStatusReportRoutingForWorker(w, w.Config.RequestSMSDeliveryReports)
 		// 纯 QMI 模式不监听 AT URC；AT 口仅保留给人工 AT 终端。
 	} else if backendMode == backend.BackendMBIM {
 		w.smsMode = smsModeMBIM
@@ -581,6 +582,12 @@ func (p *Pool) AddWorkerFromConfig(devCfg config.DeviceConfig) (*Worker, error) 
 		m.SetSMSCallback(func(sender, content string, timestamp time.Time) {
 			w.processSMS(sender, content, timestamp)
 		})
+		m.SetStatusReportHandler(func(sr smscodec.StatusReportInfo, raw []byte) {
+			w.handleIncomingStatusReport(sr, raw)
+		})
+		if err := m.SetSMSDeliveryReportsEnabled(w.Config.RequestSMSDeliveryReports); err != nil {
+			logger.Warn(fmt.Sprintf("[%s] 设置短信送达报告上报失败", w.ID), "err", err)
+		}
 	}
 	logger.Info(fmt.Sprintf("[%s] 短信模式已配置", w.ID), "sms_mode", w.smsMode.String(), "backend", backendMode)
 

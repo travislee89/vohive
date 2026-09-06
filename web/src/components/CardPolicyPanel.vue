@@ -31,7 +31,16 @@ const local = ref<{
   ip_version: 'v4' | 'v6' | 'v4v6'
   apn: string
   roaming_data_enabled: boolean
-}>({ network_enabled: false, vowifi_enabled: false, airplane_enabled: false, ip_version: 'v4', apn: '', roaming_data_enabled: false })
+  request_sms_delivery_reports: boolean
+}>({
+  network_enabled: false,
+  vowifi_enabled: false,
+  airplane_enabled: false,
+  ip_version: 'v4',
+  apn: '',
+  roaming_data_enabled: false,
+  request_sms_delivery_reports: false
+})
 
 // 各开关的热切换中间态（pending/failed）
 const networkPending = ref(false)
@@ -42,6 +51,8 @@ const airplanePending = ref(false)
 const airplaneFailed = ref(false)
 const roamingDataPending = ref(false)
 const roamingDataFailed = ref(false)
+const smsDeliveryReportsPending = ref(false)
+const smsDeliveryReportsFailed = ref(false)
 
 // ===== 流量限制编辑状态 =====
 // 编辑用「数值 + 单位」组合，保存时换算成字节；展示用从 policy.quota_usage 读。
@@ -98,10 +109,12 @@ watch(
     local.value.ip_version = p.ip_version || 'v4'
     local.value.apn = p.apn || ''
     local.value.roaming_data_enabled = !!p.roaming_data_enabled
+    local.value.request_sms_delivery_reports = !!p.request_sms_delivery_reports
     networkFailed.value = false
     vowifiFailed.value = false
     airplaneFailed.value = false
     roamingDataFailed.value = false
+    smsDeliveryReportsFailed.value = false
     // 同步流量限制编辑状态
     quota.value.enabled = !!p.quota_enabled
     const qs = splitBytes(p.quota_bytes || 0)
@@ -270,6 +283,27 @@ async function onRoamingDataToggle(rawVal: string | number | boolean) {
     emit('policyChanged')
   }
 }
+
+async function onSMSDeliveryReportsToggle(rawVal: string | number | boolean) {
+  const val = rawVal as boolean
+  if (!props.iccid || !canToggle.value) return
+  smsDeliveryReportsPending.value = true
+  smsDeliveryReportsFailed.value = false
+  const prev = !val
+  const result = await cardsService.putPolicy(props.iccid, {
+    request_sms_delivery_reports: val,
+  })
+  smsDeliveryReportsPending.value = false
+  if (!result.ok) {
+    local.value.request_sms_delivery_reports = prev
+    smsDeliveryReportsFailed.value = true
+    ElMessage.error(errorMessage(result.error, '设置短信送达报告失败'))
+  } else {
+    smsDeliveryReportsFailed.value = false
+    ElMessage.success(val ? '已开启短信送达报告' : '已关闭短信送达报告')
+    emit('policyChanged')
+  }
+}
 </script>
 
 <template>
@@ -419,6 +453,29 @@ async function onRoamingDataToggle(rawVal: string | number | boolean) {
           </div>
         </div>
 
+        <!-- 短信送达报告 -->
+        <div
+          class="ui-panel-muted p-3 space-y-1"
+          :class="local.request_sms_delivery_reports ? 'border border-blue-300 bg-blue-50/50 dark:bg-blue-900/20' : ''"
+        >
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm font-bold text-gray-800 dark:text-gray-100">短信送达报告</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                开启后发送短信默认请求 TP-SRR 送达报告（对方手机是否收到），需运营商与模组支持
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span v-if="smsDeliveryReportsFailed" class="text-xs text-orange-500 dark:text-orange-400">未生效</span>
+              <el-icon v-if="smsDeliveryReportsPending" class="animate-spin text-gray-400"><Loading /></el-icon>
+              <el-switch
+                v-model="local.request_sms_delivery_reports"
+                :disabled="!canToggle || smsDeliveryReportsPending"
+                @change="onSMSDeliveryReportsToggle"
+              />
+            </div>
+          </div>
+        </div>
 
       </div>
       <!-- 流量限制 -->

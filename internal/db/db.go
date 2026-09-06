@@ -200,6 +200,8 @@ func Init(dbPath string) error {
 		&CallLog{},
 		&SMSDelivery{},
 		&SMSDeliveryPart{},
+		&SMSStatusReport{},
+		&SMSMRCounter{},
 		&TrafficMinute{},
 		&TrafficHour{},
 		&TrafficDay{},

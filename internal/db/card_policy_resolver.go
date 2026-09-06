@@ -11,18 +11,19 @@ func (CardPolicyResolver) Resolve(iccid string) (cardpolicy.Policy, error) {
 		return cardpolicy.Policy{}, err
 	}
 	return cardpolicy.Policy{
-		ICCID:                  p.ICCID,
-		NetworkEnabled:         p.NetworkEnabled,
-		VoWiFiEnabled:          p.VoWiFiEnabled,
-		AirplaneEnabled:        p.AirplaneEnabled,
-		IPVersion:              p.IPVersion,
-		APN:                    p.APN,
-		RoamingDataEnabled:     p.RoamingDataEnabled,
-		QuotaEnabled:           p.QuotaEnabled,
-		QuotaBytes:             p.QuotaBytes,
-		BillingDay:             p.BillingDay,
-		BillingTimezone:        p.BillingTimezone,
-		AutoStopEnabled:        p.AutoStopEnabled,
-		AutoStopThresholdBytes: p.AutoStopThresholdBytes,
+		ICCID:                     p.ICCID,
+		NetworkEnabled:            p.NetworkEnabled,
+		VoWiFiEnabled:             p.VoWiFiEnabled,
+		AirplaneEnabled:           p.AirplaneEnabled,
+		IPVersion:                 p.IPVersion,
+		APN:                       p.APN,
+		RoamingDataEnabled:        p.RoamingDataEnabled,
+		RequestSMSDeliveryReports: p.RequestSMSDeliveryReports,
+		QuotaEnabled:              p.QuotaEnabled,
+		QuotaBytes:                p.QuotaBytes,
+		BillingDay:                p.BillingDay,
+		BillingTimezone:           p.BillingTimezone,
+		AutoStopEnabled:           p.AutoStopEnabled,
+		AutoStopThresholdBytes:    p.AutoStopThresholdBytes,
 	}, nil
 }

@@ -19,6 +19,22 @@ export type SmsSendPayload = {
   imsi?: string
   phone: string
   message: string
+  request_delivery_report?: boolean
+}
+
+export type SmsStatusReport = {
+  id: number
+  sms_id: number
+  device_id: string
+  imsi: string
+  peer: string
+  part_no: number
+  tp_mr: number
+  requested_at: string
+  state: 'pending' | 'delivered' | 'forwarding' | 'failed' | 'timeout'
+  tp_status?: number
+  discharge_at?: string
+  reported_at?: string
 }
 
 export type SmsDeleteThreadPayload = {
@@ -91,10 +107,21 @@ export const smsService = {
   },
   send(payload: SmsSendPayload) {
     return callService(async () => {
-      const res = await api.post<{ parts_total?: number }>('/sms/send', payload)
+      const res = await api.post<{ parts_total?: number; sms_id?: number; requested_delivery_report?: boolean }>(
+        '/sms/send',
+        payload
+      )
       return {
-        partsTotal: Number(res.data?.parts_total || 0)
+        partsTotal: Number(res.data?.parts_total || 0),
+        smsId: Number(res.data?.sms_id || 0),
+        requestedDeliveryReport: !!res.data?.requested_delivery_report
       }
+    })
+  },
+  getStatusReport(smsId: number) {
+    return callService(async () => {
+      const res = await api.get<{ report: SmsStatusReport }>(`/sms/status-report/${smsId}`)
+      return res.data.report
     })
   },
   deleteMessage(id: number) {

@@ -29,6 +29,9 @@ type qmiSMSCoreStub struct {
 	listCalls   []string
 	deleteCalls []string
 	ackCalls    []qmicore.RawSMSIndication
+
+	routes                       []qmi.WMSRoute
+	transferStatusReportToClient bool
 }
 
 func (s *qmiSMSCoreStub) key(storage uint8, index uint32) string {
@@ -85,6 +88,20 @@ func (s *qmiSMSCoreStub) AckRawSMS(ctx context.Context, info qmicore.RawSMSIndic
 		s.ackCalls = append(s.ackCalls, info)
 	}
 	return nil
+}
+
+func (s *qmiSMSCoreStub) WMSSetRoutes(ctx context.Context, routes []qmi.WMSRoute, transferStatusReportToClient bool) error {
+	s.routes = routes
+	s.transferStatusReportToClient = transferStatusReportToClient
+	return nil
+}
+
+func (s *qmiSMSCoreStub) WMSGetRoutes(ctx context.Context) (*qmi.WMSRouteConfig, error) {
+	return &qmi.WMSRouteConfig{
+		Routes:                       s.routes,
+		TransferStatusReportToClient: s.transferStatusReportToClient,
+		HasTransferStatusReport:      true,
+	}, nil
 }
 
 const qmiRawSMSFixtureFullPDU = "0791448720003023400ED0E7B4D97C0E9BCD000062500221230140A00500036A0402CAA0B49B5E96BBCB741DE81C369B5DECFC8B2E0FDBCBEC3099FC76CF158A6198CD9E83C6EF391D1488B960AF76DA5DA79741F437A81D5E9741613719242F8FCB697BD905A296F1F439282C2F8366303888FE06CDCB6E32485CA783CCF27219447F83E4E571396D2FBB40C4303D0C4ACF416374587E2E9341613A480683BF9A429742617CCB41000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
@@ -274,6 +291,40 @@ func TestHandleRawSMSQMIProcessesAndAcksDirectPDU(t *testing.T) {
 	}
 	if stub.ackCalls[0].TransactionID != 0x11223344 {
 		t.Fatalf("ack transaction=0x%x, want 0x11223344", stub.ackCalls[0].TransactionID)
+	}
+}
+
+// qmiStatusReportFixtureTPDU 是一条合法的 SMS-STATUS-REPORT TPDU（取自
+// github.com/warthog618/sms 的 "SmsStatusReport full" 测试用例：MR=0x42, RA="6391", ST=0xab），
+// TP-MTI=10（首字节 0x06 & 0x03 == 0x02），quectel-qmi-go 的 DecodeIncomingSMSPDU 只认
+// TP-MTI=00 (SMS-DELIVER)，因此会拒绝它，用于验证 vohive 侧的兜底解码回退路径。
+var qmiStatusReportFixtureTPDU = []byte{
+	0x06, 0x42, 0x04, 0x91, 0x36, 0x19, 0x51, 0x50, 0x71, 0x32, 0x20,
+	0x05, 0x23, 0x51, 0x40, 0x81, 0x32, 0x20, 0x05, 0x42, 0xab, 0x07,
+	0x89, 0x04, 0x06, 0x72, 0x65, 0x70, 0x6f, 0x72, 0x74,
+}
+
+func TestHandleRawSMSQMIFallsBackToStatusReportDecode(t *testing.T) {
+	stub := &qmiSMSCoreStub{}
+	worker := &Worker{
+		ID:          "wwan0",
+		Pool:        &Pool{},
+		qmiSMS:      stub,
+		reassembler: smscodec.NewReassembler(),
+	}
+
+	worker.handleNewSMSRawQMI(qmicore.RawSMSIndication{
+		PDU:           qmiStatusReportFixtureTPDU,
+		AckRequired:   true,
+		TransactionID: 0x99887766,
+		Format:        0x06,
+	})
+
+	if len(stub.ackCalls) != 1 {
+		t.Fatalf("ackCalls=%d, want 1 (status report should still be ACKed)", len(stub.ackCalls))
+	}
+	if stub.ackCalls[0].TransactionID != 0x99887766 {
+		t.Fatalf("ack transaction=0x%x, want 0x99887766", stub.ackCalls[0].TransactionID)
 	}
 }
 

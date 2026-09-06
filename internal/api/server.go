@@ -251,7 +251,8 @@ func (s *Server) newRouter() *gin.Engine {
 
 		// ===== 短信 =====
 		api.POST("/sms/send", s.handleSendSMS)                             // 发送短信（自动选择 AT 或 VoWiFi）
-		api.GET("/sms/delivery/:message_id", s.handleSMSDelivery)          // 查询发送投递状态
+		api.GET("/sms/delivery/:message_id", s.handleSMSDelivery)          // 查询发送投递状态（VoWiFi）
+		api.GET("/sms/status-report/:sms_id", s.handleSMSStatusReport)     // 查询送达报告状态（TP-SRR，AT/QMI/MBIM）
 		api.GET("/sms/contacts", s.handleGetSMSContacts)                   // 获取短信联系人列表
 		api.GET("/sms/thread", s.handleGetSMSThread)                       // 获取与某联系人的短信会话
 		api.DELETE("/sms/messages/:id", s.handleDeleteSMSMessage)          // 删除单条历史短信
@@ -1131,11 +1132,12 @@ func (s *Server) handleStats(c *gin.Context) {
 
 func (s *Server) handleSendSMS(c *gin.Context) {
 	type SendSMSRequest struct {
-		DeviceID string `json:"device_id"`
-		IMSI     string `json:"imsi"`
-		Phone    string `json:"phone" binding:"required"`
-		Message  string `json:"message" binding:"required"`
-		Encoding string `json:"encoding"`
+		DeviceID              string `json:"device_id"`
+		IMSI                  string `json:"imsi"`
+		Phone                 string `json:"phone" binding:"required"`
+		Message               string `json:"message" binding:"required"`
+		Encoding              string `json:"encoding"`
+		RequestDeliveryReport bool   `json:"request_delivery_report"` // 是否请求送达报告（TP-SRR）；未设置时按设备策略默认值
 	}
 
 	var req SendSMSRequest
@@ -1151,7 +1153,7 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "短信编码参数错误: " + err.Error()})
 		return
 	}
-	sendOpts := smscodec.SubmitOptions{Encoding: encoding}
+	sendOpts := smscodec.SubmitOptions{Encoding: encoding, RequestStatusReport: req.RequestDeliveryReport}
 
 	var worker *device.Worker
 	if deviceID != "" {
@@ -1188,25 +1190,29 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 	result, err := s.pool.SendSMSAction(c.Request.Context(), deviceID, req.Phone, req.Message, sendOpts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":         "error",
-			"message":        err.Error(),
-			"device":         deviceID,
-			"phone":          req.Phone,
-			"message_id":     result.MessageID,
-			"parts_total":    result.PartsTotal,
-			"delivery_state": result.DeliveryState,
+			"status":                    "error",
+			"message":                   err.Error(),
+			"device":                    deviceID,
+			"phone":                     req.Phone,
+			"message_id":                result.MessageID,
+			"parts_total":               result.PartsTotal,
+			"delivery_state":            result.DeliveryState,
+			"sms_id":                    result.SMSID,
+			"requested_delivery_report": result.RequestedDeliveryReport,
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":         "ok",
-		"message":        "短信发送成功",
-		"device":         deviceID,
-		"phone":          req.Phone,
-		"message_id":     result.MessageID,
-		"parts_total":    result.PartsTotal,
-		"delivery_state": result.DeliveryState,
+		"status":                    "ok",
+		"message":                   "短信发送成功",
+		"device":                    deviceID,
+		"phone":                     req.Phone,
+		"message_id":                result.MessageID,
+		"parts_total":               result.PartsTotal,
+		"delivery_state":            result.DeliveryState,
+		"sms_id":                    result.SMSID,
+		"requested_delivery_report": result.RequestedDeliveryReport,
 	})
 }
 

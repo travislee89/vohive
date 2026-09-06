@@ -54,6 +54,8 @@ type qmiSMSCore interface {
 	ReadSMS(preferredStorage uint8, index uint32) (*qmimanager.DecodedSMS, error)
 	WMSDeleteMessage(ctx context.Context, storageType uint8, index uint32) error
 	AckRawSMS(ctx context.Context, info qmicore.RawSMSIndication, success bool) error
+	WMSSetRoutes(ctx context.Context, routes []qmi.WMSRoute, transferStatusReportToClient bool) error
+	WMSGetRoutes(ctx context.Context) (*qmi.WMSRouteConfig, error)
 }
 
 type liveSIMIdentityReader interface {
@@ -1688,6 +1690,7 @@ func (p *Pool) startAllSynchronousLegacy() error {
 					w.handleNewSMSRawQMI(info)
 				})
 			}
+			p.applyQMIStatusReportRoutingForWorker(w, w.Config.RequestSMSDeliveryReports)
 			// 纯 QMI 模式不监听 AT URC；AT 口仅保留给人工 AT 终端。
 		} else if bMode == backend.BackendMBIM {
 			// MBIM 模式：SMS_READ indication → handleNewSMSMBIM → processSMS
@@ -1710,6 +1713,12 @@ func (p *Pool) startAllSynchronousLegacy() error {
 			m.SetSMSCallback(func(sender, content string, timestamp time.Time) {
 				w.processSMS(sender, content, timestamp)
 			})
+			m.SetStatusReportHandler(func(sr smscodec.StatusReportInfo, raw []byte) {
+				w.handleIncomingStatusReport(sr, raw)
+			})
+			if err := m.SetSMSDeliveryReportsEnabled(w.Config.RequestSMSDeliveryReports); err != nil {
+				logger.Warn(fmt.Sprintf("[%s] 设置短信送达报告上报失败", w.ID), "err", err)
+			}
 		}
 		logger.Info(fmt.Sprintf("[%s] 短信模式已配置", w.ID), "sms_mode", w.smsMode.String(), "backend", bMode)
 

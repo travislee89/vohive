@@ -304,6 +304,28 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorMessage'
 
+  /sms/status-report/{sms_id}:
+    get:
+      tags: [sms]
+      summary: 查询短信送达报告状态（TP-SRR，AT/QMI/MBIM 蜂窝短信；与 VoWiFi 专用的 /sms/delivery 不是同一套机制）
+      parameters:
+        - in: path
+          name: sms_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 送达报告状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMSStatusReportResponse'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '404':
+          $ref: '#/components/responses/ErrorMessage'
+
   /sms/contacts:
     get:
       tags: [sms]
@@ -2919,6 +2941,9 @@ components:
           type: string
         message:
           type: string
+        request_delivery_report:
+          type: boolean
+          description: 是否请求送达报告（TP-SRR）；未设置时按设备策略默认值（见 CardPolicy.request_sms_delivery_reports）
 
     SMSSendResponse:
       type: object
@@ -2937,6 +2962,11 @@ components:
           type: integer
         delivery_state:
           type: string
+        sms_id:
+          type: integer
+          description: db.SMS 主键，用于查询 /sms/status-report/{sms_id}
+        requested_delivery_report:
+          type: boolean
 
     SMSDeliveryResponse:
       type: object
@@ -2946,6 +2976,47 @@ components:
         delivery:
           type: object
           additionalProperties: true
+
+    SMSStatusReport:
+      type: object
+      description: TP-SRR 送达报告状态（区别于 SMSDeliveryResponse：后者是 VoWiFi/IMS 场景下的 RP-ACK/RP-ERROR）
+      properties:
+        id:
+          type: integer
+        sms_id:
+          type: integer
+        device_id:
+          type: string
+        imsi:
+          type: string
+        peer:
+          type: string
+        part_no:
+          type: integer
+        tp_mr:
+          type: integer
+        requested_at:
+          type: string
+          format: date-time
+        state:
+          type: string
+          enum: [pending, delivered, forwarding, failed, timeout]
+        tp_status:
+          type: integer
+        discharge_at:
+          type: string
+          format: date-time
+        reported_at:
+          type: string
+          format: date-time
+
+    SMSStatusReportResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        report:
+          $ref: '#/components/schemas/SMSStatusReport'
 
     SMSMessage:
       type: object

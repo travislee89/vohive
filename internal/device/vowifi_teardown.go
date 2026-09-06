@@ -9,6 +9,7 @@ import (
 	"github.com/travislee89/vohive/internal/backend"
 	"github.com/travislee89/vohive/internal/vowifihost"
 	"github.com/travislee89/vohive/pkg/logger"
+	"github.com/travislee89/vohive/pkg/smscodec"
 )
 
 func (p *Pool) stopVoWiFiAppForTeardown(ctx context.Context, deviceID, reason string) bool {
@@ -37,9 +38,12 @@ func (p *Pool) restoreSMSModeAfterVoWiFiTeardown(w *Worker) {
 		w.smsMode = smsModeAT
 		if w.Modem != nil {
 			w.Modem.SetDisableURCRead(false)
-			w.Modem.ExecuteATSilent("AT+CNMI=2,1,0,0,0", 2*time.Second)
+			w.Modem.SetSMSDeliveryReportsEnabled(w.Config.RequestSMSDeliveryReports)
 			w.Modem.SetSMSCallback(func(sender, content string, timestamp time.Time) {
 				w.processSMS(sender, content, timestamp)
+			})
+			w.Modem.SetStatusReportHandler(func(sr smscodec.StatusReportInfo, raw []byte) {
+				w.handleIncomingStatusReport(sr, raw)
 			})
 		}
 	}

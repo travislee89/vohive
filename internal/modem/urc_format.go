@@ -214,6 +214,13 @@ func (m *Manager) formatURC(line string) urcFormatResult {
 		out.Fields = append(out.Fields, "state", strings.TrimSpace(rest))
 		return out
 
+	case "+CDS":
+		rest := parseURCAfterColon(s)
+		out.Level = urcLogInfo
+		out.Msg = "URC: 短信送达报告"
+		out.Fields = append(out.Fields, "len", strings.TrimSpace(rest))
+		return out
+
 	case "+CPCMREG":
 		rest := parseURCAfterColon(s)
 		out.Level = urcLogInfo
