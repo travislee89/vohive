@@ -10,7 +10,7 @@ const activeTab = ref('logs')
 
 <template>
   <div class="max-w-7xl mx-auto">
-    <PageHeader title="通知中心" subtitle="管理转发日志、转发规则与转发通道" />
+    <PageHeader title="转发中心" subtitle="管理转发日志、转发规则与转发通道" />
 
     <el-tabs v-model="activeTab" class="notify-center-tabs">
       <el-tab-pane label="转发日志" name="logs">

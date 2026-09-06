@@ -35,7 +35,7 @@ tags:
   - name: logs
     description: 日志历史与实时流
   - name: notify
-    description: 通知中心：转发规则与转发日志
+    description: 转发中心：转发规则与转发日志
   - name: automation
     description: 自动化中心：定时/间隔任务（重启基带、发送短信）与运行日志
 paths:
