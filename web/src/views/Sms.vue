@@ -509,13 +509,17 @@ async function handleSelectDevice(deviceId: string, options: { syncRoute?: boole
   const silent = options.silent === true
 
   selectedDevice.value = nextDevice
-  clearSelectedThread(false)
+  // Invalidate any in-flight thread fetch without wiping the currently
+  // rendered thread/messages yet, so the detail pane doesn't blank out
+  // while the new device's thread list is loading.
+  threadFetchSeq += 1
   if (syncRoute) {
     void router.replace({ query: buildSmsQuery(nextDevice) })
   }
 
   const ok = await fetchMessages(silent)
   if (!ok || selectedDevice.value !== nextDevice) return
+  clearSelectedThread(false)
   await ensureThreadSelection({ syncRoute, silent, scrollToBottom: false })
 }
 
