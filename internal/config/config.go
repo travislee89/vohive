@@ -327,8 +327,9 @@ type TelegramConfig struct {
 	BotToken string `mapstructure:"bot_token"`
 	ChatID   int64  `mapstructure:"chat_id"`
 	AdminID  int64  `mapstructure:"admin_id"`
-	BaseURL  string `mapstructure:"base_url"` // 反向代理地址 (例如 https://api.telegram.org/bot%s/%s)
-	Proxy    string `mapstructure:"proxy"`    // HTTP 代理地址 (例如 http://127.0.0.1:7890)
+	BaseURL  string `mapstructure:"base_url"`  // 反向代理地址 (例如 https://api.telegram.org/bot%s/%s)
+	Proxy    string `mapstructure:"proxy"`     // HTTP 代理地址 (例如 http://127.0.0.1:7890)
+	RetryMax int    `mapstructure:"retry_max"` // 发送失败后的最大重试次数（指数退避 1s/2s/4s...）
 }
 
 // FeishuConfig 飞书通知配置
@@ -338,6 +339,7 @@ type FeishuConfig struct {
 	AppSecret string   `mapstructure:"app_secret"` // 飞书开放平台应用 App Secret
 	ChatIDs   []string `mapstructure:"chat_ids"`   // 飞书群聊 chat_id 列表
 	ChatID    string   `mapstructure:"chat_id"`    // 兼容旧配置：单个 chat_id
+	RetryMax  int      `mapstructure:"retry_max"`  // 发送失败后的最大重试次数（指数退避 1s/2s/4s...）
 }
 
 type QQConfig struct {
@@ -346,6 +348,7 @@ type QQConfig struct {
 	AppSecret string `mapstructure:"app_secret"`
 	GroupIDs  string `mapstructure:"group_ids"`  // 逗号分隔的群组 OpenID
 	DirectIDs string `mapstructure:"direct_ids"` // 逗号分隔的私聊 OpenID
+	RetryMax  int    `mapstructure:"retry_max"`  // 发送失败后的最大重试次数（指数退避 1s/2s/4s...）
 }
 
 type WebhookConfig struct {
@@ -359,11 +362,12 @@ type WebhookConfig struct {
 }
 
 type BarkConfig struct {
-	Enabled bool     `mapstructure:"enabled"`
-	URLs    []string `mapstructure:"urls"`
-	Group   string   `mapstructure:"group"`
-	Icon    string   `mapstructure:"icon"`
-	Level   string   `mapstructure:"level"`
+	Enabled  bool     `mapstructure:"enabled"`
+	URLs     []string `mapstructure:"urls"`
+	Group    string   `mapstructure:"group"`
+	Icon     string   `mapstructure:"icon"`
+	Level    string   `mapstructure:"level"`
+	RetryMax int      `mapstructure:"retry_max"` // 发送失败后的最大重试次数（指数退避 1s/2s/4s...）
 }
 
 type EmailConfig struct {
@@ -375,13 +379,15 @@ type EmailConfig struct {
 	Password    string   `mapstructure:"password"`
 	FromAddress string   `mapstructure:"from_address"`
 	ToAddresses []string `mapstructure:"to_addresses"`
+	RetryMax    int      `mapstructure:"retry_max"` // 发送失败后的最大重试次数（指数退避 1s/2s/4s...）
 }
 
 type PushplusConfig struct {
-	Enabled bool   `mapstructure:"enabled"`
-	Token   string `mapstructure:"token"`
-	Topic   string `mapstructure:"topic"`
-	Channel string `mapstructure:"channel"`
+	Enabled  bool   `mapstructure:"enabled"`
+	Token    string `mapstructure:"token"`
+	Topic    string `mapstructure:"topic"`
+	Channel  string `mapstructure:"channel"`
+	RetryMax int    `mapstructure:"retry_max"` // 发送失败后的最大重试次数（指数退避 1s/2s/4s...）
 }
 
 // OpenCellIDConfig 保存用于查询 OpenCellID 基站定位 API 的密钥。
@@ -409,9 +415,15 @@ func Load(path string) (*Config, error) {
 	viper.SetDefault("bark.enabled", false)
 	viper.SetDefault("bark.group", "vohive")
 	viper.SetDefault("bark.level", "active")
+	viper.SetDefault("bark.retry_max", 3)
 	viper.SetDefault("email.enabled", false)
 	viper.SetDefault("email.use_ssl", false)
+	viper.SetDefault("email.retry_max", 3)
 	viper.SetDefault("pushplus.enabled", false)
+	viper.SetDefault("pushplus.retry_max", 3)
+	viper.SetDefault("telegram.retry_max", 3)
+	viper.SetDefault("feishu.retry_max", 3)
+	viper.SetDefault("qq.retry_max", 3)
 	viper.SetDefault("web.username", "admin")
 	viper.SetDefault("web.password", "admin")
 	viper.SetDefault("vowifi.enabled", false)

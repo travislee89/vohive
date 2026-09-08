@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/travislee89/vohive/internal/config"
 	"github.com/travislee89/vohive/pkg/logger"
@@ -42,6 +43,7 @@ type FeishuChannel struct {
 	chatIDs  []string
 	handlers map[string]CommandHandler
 	cfg      config.FeishuConfig
+	retryMax int
 }
 
 // NewFeishuChannel 根据配置创建飞书渠道
@@ -89,6 +91,7 @@ func NewFeishuChannel(cfg config.FeishuConfig) (*FeishuChannel, error) {
 		chatIDs:  chatIDs,
 		handlers: make(map[string]CommandHandler),
 		cfg:      cfg,
+		retryMax: normalizeRetryMax(cfg.RetryMax),
 	}, nil
 }
 
@@ -108,26 +111,53 @@ func (f *FeishuChannel) Send(text string) error {
 
 	var lastErr error
 	for _, chatID := range f.chatIDs {
+		if err := f.sendToChatWithRetry(chatID, string(content)); err != nil {
+			logger.Error("发送飞书消息失败", "chat_id", chatID, "err", err)
+			lastErr = err
+		}
+	}
+
+	return lastErr
+}
+
+// sendToChatWithRetry 向单个 chat_id 发送消息，对网络错误和飞书侧 5xx 执行指数退避重试
+func (f *FeishuChannel) sendToChatWithRetry(chatID, content string) error {
+	var lastErr error
+
+	for attempt := 0; attempt <= f.retryMax; attempt++ {
+		if attempt > 0 {
+			time.Sleep(retryBackoff(attempt))
+		}
+
 		req := larkim.NewCreateMessageReqBuilder().
 			ReceiveIdType("chat_id").
 			Body(larkim.NewCreateMessageReqBodyBuilder().
 				ReceiveId(chatID).
 				MsgType("text").
-				Content(string(content)).
+				Content(content).
 				Build()).
 			Build()
 
 		resp, err := f.client.Im.Message.Create(context.Background(), req)
 		if err != nil {
-			logger.Error("发送飞书消息失败", "chat_id", chatID, "err", err)
 			lastErr = err
+			logger.Debug("飞书消息发送失败，准备重试", "chat_id", chatID, "attempt", attempt+1, "err", err)
 			continue
 		}
-		if !resp.Success() {
-			logger.Error("发送飞书消息失败", "chat_id", chatID, "code", resp.Code, "msg", resp.Msg)
-			lastErr = fmt.Errorf("飞书 API 错误 %d: %s", resp.Code, resp.Msg)
-			continue
+		if resp.Success() {
+			return nil
 		}
+
+		statusCode := 0
+		if resp.ApiResp != nil {
+			statusCode = resp.StatusCode
+		}
+		if !retryableHTTPStatus(statusCode) {
+			return fmt.Errorf("飞书 API 错误 %d: %s", resp.Code, resp.Msg)
+		}
+
+		lastErr = fmt.Errorf("飞书 API 错误 %d: %s", resp.Code, resp.Msg)
+		logger.Debug("飞书消息发送失败（服务端错误），准备重试", "chat_id", chatID, "attempt", attempt+1, "status", statusCode)
 	}
 
 	return lastErr

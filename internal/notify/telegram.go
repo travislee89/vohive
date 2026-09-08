@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -20,6 +21,7 @@ type TelegramChannel struct {
 	api      *tgbotapi.BotAPI
 	chatID   int64
 	handlers map[string]CommandHandler
+	retryMax int
 }
 
 // NewTelegramChannel 根据配置创建 Telegram 渠道
@@ -67,6 +69,7 @@ func NewTelegramChannel(cfg config.TelegramConfig) (*TelegramChannel, error) {
 		api:      bot,
 		chatID:   cfg.ChatID,
 		handlers: make(map[string]CommandHandler),
+		retryMax: normalizeRetryMax(cfg.RetryMax),
 	}, nil
 }
 
@@ -94,12 +97,39 @@ func (t *TelegramChannel) Send(text string) error {
 	}
 
 	msg := buildTelegramTextMessage(t.chatID, text)
-	_, err := t.api.Send(msg)
-	if err != nil {
-		logger.Error("发送 telegram 消息失败", "err", err)
-		return err
+
+	var lastErr error
+	for attempt := 0; attempt <= t.retryMax; attempt++ {
+		if attempt > 0 {
+			time.Sleep(telegramRetryDelay(lastErr, attempt))
+		}
+
+		_, err := t.api.Send(msg)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+
+		var apiErr *tgbotapi.Error
+		if errors.As(err, &apiErr) && !retryableHTTPStatus(apiErr.Code) {
+			logger.Error("发送 telegram 消息失败，不重试", "err", err)
+			return err
+		}
+		logger.Debug("发送 telegram 消息失败，准备重试", "attempt", attempt+1, "err", err)
 	}
-	return nil
+
+	logger.Error("发送 telegram 消息失败（已重试）", "retry_max", t.retryMax, "err", lastErr)
+	return lastErr
+}
+
+// telegramRetryDelay 优先遵循 429 响应里 Telegram 告知的 retry_after 秒数；
+// 该字段缺失或错误不是限流（网络错误 / 5xx）时，回退到统一的指数退避曲线。
+func telegramRetryDelay(lastErr error, attempt int) time.Duration {
+	var apiErr *tgbotapi.Error
+	if errors.As(lastErr, &apiErr) && apiErr.Code == http.StatusTooManyRequests && apiErr.RetryAfter > 0 {
+		return time.Duration(apiErr.RetryAfter) * time.Second
+	}
+	return retryBackoff(attempt)
 }
 
 func (t *TelegramChannel) RegisterCommand(cmd string, handler CommandHandler) {

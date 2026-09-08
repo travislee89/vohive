@@ -26,6 +26,7 @@ func UpdateNotificationInFile(path string, telegram TelegramConfig, feishu Feish
 		"admin_id":  telegram.AdminID,
 		"base_url":  telegram.BaseURL,
 		"proxy":     telegram.Proxy,
+		"retry_max": telegram.RetryMax,
 	}
 
 	root["feishu"] = map[string]any{
@@ -33,6 +34,7 @@ func UpdateNotificationInFile(path string, telegram TelegramConfig, feishu Feish
 		"app_id":     feishu.AppID,
 		"app_secret": feishu.AppSecret,
 		"chat_ids":   feishu.ChatIDs,
+		"retry_max":  feishu.RetryMax,
 	}
 
 	root["qq"] = map[string]any{
@@ -41,6 +43,7 @@ func UpdateNotificationInFile(path string, telegram TelegramConfig, feishu Feish
 		"app_secret": qq.AppSecret,
 		"group_ids":  qq.GroupIDs,
 		"direct_ids": qq.DirectIDs,
+		"retry_max":  qq.RetryMax,
 	}
 
 	root["webhook"] = map[string]any{
@@ -54,11 +57,12 @@ func UpdateNotificationInFile(path string, telegram TelegramConfig, feishu Feish
 	}
 
 	root["bark"] = map[string]any{
-		"enabled": bark.Enabled,
-		"urls":    bark.URLs,
-		"group":   bark.Group,
-		"icon":    bark.Icon,
-		"level":   bark.Level,
+		"enabled":   bark.Enabled,
+		"urls":      bark.URLs,
+		"group":     bark.Group,
+		"icon":      bark.Icon,
+		"level":     bark.Level,
+		"retry_max": bark.RetryMax,
 	}
 
 	root["email"] = map[string]any{
@@ -69,13 +73,15 @@ func UpdateNotificationInFile(path string, telegram TelegramConfig, feishu Feish
 		"password":     email.Password,
 		"from_address": email.FromAddress,
 		"to_addresses": email.ToAddresses,
+		"retry_max":    email.RetryMax,
 	}
 
 	root["pushplus"] = map[string]any{
-		"enabled": pushplus.Enabled,
-		"token":   pushplus.Token,
-		"topic":   pushplus.Topic,
-		"channel": pushplus.Channel,
+		"enabled":   pushplus.Enabled,
+		"token":     pushplus.Token,
+		"topic":     pushplus.Topic,
+		"channel":   pushplus.Channel,
+		"retry_max": pushplus.RetryMax,
 	}
 
 	out, err := yaml.Marshal(root)

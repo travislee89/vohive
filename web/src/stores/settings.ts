@@ -39,6 +39,7 @@ type TelegramForm = {
   admin_id: number | null
   base_url: string
   proxy: string
+  retry_max: number
 }
 
 type FeishuForm = {
@@ -46,6 +47,7 @@ type FeishuForm = {
   app_id: string
   app_secret: string
   chat_ids: string
+  retry_max: number
 }
 
 type QQForm = {
@@ -54,6 +56,7 @@ type QQForm = {
   app_secret: string
   group_ids: string
   direct_ids: string
+  retry_max: number
 }
 
 type EmailForm = {
@@ -65,6 +68,7 @@ type EmailForm = {
   password: string
   from_address: string
   to_addresses: string
+  retry_max: number
 }
 
 type PushplusForm = {
@@ -72,6 +76,7 @@ type PushplusForm = {
   token: string
   topic: string
   channel: string
+  retry_max: number
 }
 
 const DEFAULT_PASSWORD_FORM: PasswordForm = {
@@ -86,14 +91,16 @@ const DEFAULT_TELEGRAM_FORM: TelegramForm = {
   chat_id: null,
   admin_id: null,
   base_url: '',
-  proxy: ''
+  proxy: '',
+  retry_max: 3
 }
 
 const DEFAULT_FEISHU_FORM: FeishuForm = {
   enabled: false,
   app_id: '',
   app_secret: '',
-  chat_ids: ''
+  chat_ids: '',
+  retry_max: 3
 }
 
 const DEFAULT_QQ_FORM: QQForm = {
@@ -101,7 +108,8 @@ const DEFAULT_QQ_FORM: QQForm = {
   app_id: '',
   app_secret: '',
   group_ids: '',
-  direct_ids: ''
+  direct_ids: '',
+  retry_max: 3
 }
 
 const DEFAULT_EMAIL_FORM: EmailForm = {
@@ -112,14 +120,16 @@ const DEFAULT_EMAIL_FORM: EmailForm = {
   username: '',
   password: '',
   from_address: '',
-  to_addresses: ''
+  to_addresses: '',
+  retry_max: 3
 }
 
 const DEFAULT_PUSHPLUS_FORM: PushplusForm = {
   enabled: false,
   token: '',
   topic: '',
-  channel: 'wechat'
+  channel: 'wechat',
+  retry_max: 3
 }
 
 const DEFAULT_WEBHOOK_SETTINGS: WebhookSettings = {
@@ -152,7 +162,8 @@ const DEFAULT_BARK_SETTINGS: BarkSettings = {
   urls: [],
   group: 'vohive',
   icon: '',
-  level: 'active'
+  level: 'active',
+  retry_max: 3
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -210,20 +221,23 @@ export const useSettingsStore = defineStore('settings', () => {
         chat_id: tg.chat_id ?? null,
         admin_id: tg.admin_id ?? null,
         base_url: tg.base_url || '',
-        proxy: tg.proxy || ''
+        proxy: tg.proxy || '',
+        retry_max: tg.retry_max ?? 3
       }
       feishuForm.value = {
         enabled: !!fs.enabled,
         app_id: fs.app_id || '',
         app_secret: fs.app_secret || '',
-        chat_ids: Array.isArray(fs.chat_ids) ? fs.chat_ids.join(',') : ''
+        chat_ids: Array.isArray(fs.chat_ids) ? fs.chat_ids.join(',') : '',
+        retry_max: fs.retry_max ?? 3
       }
       qqForm.value = {
         enabled: !!qq.enabled,
         app_id: qq.app_id || '',
         app_secret: qq.app_secret || '',
         group_ids: qq.group_ids || '',
-        direct_ids: qq.direct_ids || ''
+        direct_ids: qq.direct_ids || '',
+        retry_max: qq.retry_max ?? 3
       }
       webhookSettings.value = {
         enabled: !!webhook.enabled,
@@ -240,7 +254,8 @@ export const useSettingsStore = defineStore('settings', () => {
         urls: Array.isArray(bark.urls) ? bark.urls : [],
         group: bark.group || 'vohive',
         icon: bark.icon || '',
-        level: bark.level || 'active'
+        level: bark.level || 'active',
+        retry_max: bark.retry_max ?? 3
       }
       const email = result.data.email || {}
       emailForm.value = {
@@ -251,14 +266,16 @@ export const useSettingsStore = defineStore('settings', () => {
         username: email.username || '',
         password: email.password || '',
         from_address: email.from_address || '',
-        to_addresses: Array.isArray(email.to_addresses) ? email.to_addresses.join(',') : ''
+        to_addresses: Array.isArray(email.to_addresses) ? email.to_addresses.join(',') : '',
+        retry_max: email.retry_max ?? 3
       }
       const pushplus = result.data.pushplus || {}
       pushplusForm.value = {
         enabled: !!pushplus.enabled,
         token: pushplus.token || '',
         topic: pushplus.topic || '',
-        channel: pushplus.channel || 'wechat'
+        channel: pushplus.channel || 'wechat',
+        retry_max: pushplus.retry_max ?? 3
       }
       error.value = null
     } else {
@@ -286,7 +303,8 @@ export const useSettingsStore = defineStore('settings', () => {
         chat_id: telegramForm.value.chat_id ? Number(telegramForm.value.chat_id) : 0,
         admin_id: telegramForm.value.admin_id ? Number(telegramForm.value.admin_id) : 0,
         base_url: telegramForm.value.base_url || '',
-        proxy: telegramForm.value.proxy || ''
+        proxy: telegramForm.value.proxy || '',
+        retry_max: Number(telegramForm.value.retry_max) || 0
       },
       feishu: {
         enabled: !!feishuForm.value.enabled,
@@ -294,14 +312,16 @@ export const useSettingsStore = defineStore('settings', () => {
         app_secret: feishuForm.value.app_secret || '',
         chat_ids: feishuForm.value.chat_ids
           ? feishuForm.value.chat_ids.split(',').map(s => s.trim()).filter(Boolean)
-          : []
+          : [],
+        retry_max: Number(feishuForm.value.retry_max) || 0
       },
       qq: {
         enabled: !!qqForm.value.enabled,
         app_id: qqForm.value.app_id || '',
         app_secret: qqForm.value.app_secret || '',
         group_ids: qqForm.value.group_ids || '',
-        direct_ids: qqForm.value.direct_ids || ''
+        direct_ids: qqForm.value.direct_ids || '',
+        retry_max: Number(qqForm.value.retry_max) || 0
       },
       email: {
         enabled: !!emailForm.value.enabled,
@@ -313,13 +333,15 @@ export const useSettingsStore = defineStore('settings', () => {
         from_address: emailForm.value.from_address || '',
         to_addresses: emailForm.value.to_addresses
           ? emailForm.value.to_addresses.split(',').map(s => s.trim()).filter(Boolean)
-          : []
+          : [],
+        retry_max: Number(emailForm.value.retry_max) || 0
       },
       pushplus: {
         enabled: !!pushplusForm.value.enabled,
         token: pushplusForm.value.token || '',
         topic: pushplusForm.value.topic || '',
-        channel: pushplusForm.value.channel || ''
+        channel: pushplusForm.value.channel || '',
+        retry_max: Number(pushplusForm.value.retry_max) || 0
       },
       webhook: {
         enabled: !!webhookSettings.value.enabled,
@@ -335,7 +357,8 @@ export const useSettingsStore = defineStore('settings', () => {
         urls: Array.isArray(barkSettings.value.urls) ? barkSettings.value.urls : [],
         group: String(barkSettings.value.group || '').trim(),
         icon: String(barkSettings.value.icon || '').trim(),
-        level: String(barkSettings.value.level || '').trim()
+        level: String(barkSettings.value.level || '').trim(),
+        retry_max: Number(barkSettings.value.retry_max) || 0
       }
     }
   }
