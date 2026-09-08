@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { notifyService } from '../../services/notify'
 import type { NotifyLog, NotifyLogRetention } from '../../types/notify'
 import EmptyState from '../EmptyState.vue'
+import { formatISODateTime } from '../../utils/datetime'
 import { Delete20Regular } from '@vicons/fluent'
 
 const logs = ref<NotifyLog[]>([])
@@ -150,7 +151,7 @@ onMounted(() => {
     <div class="ui-card overflow-hidden">
       <el-table v-loading="loading" :data="logs" style="width: 100%">
         <el-table-column prop="timestamp" label="时间" width="180">
-          <template #default="{ row }">{{ new Date(row.timestamp).toLocaleString() }}</template>
+          <template #default="{ row }">{{ formatISODateTime(row.timestamp) }}</template>
         </el-table-column>
         <el-table-column prop="message_type" label="类型" width="90">
           <template #default="{ row }">{{ row.message_type === 'sms' ? '短信' : row.message_type }}</template>
