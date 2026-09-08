@@ -673,6 +673,12 @@ func migratePendingPhoneToSubscription(imsi, iccid string) error {
 	return DB.Where("iccid = ?", iccid).Delete(&PendingPhoneNumber{}).Error
 }
 
+// NormalizeManualPhoneNumber 校验并规范化用户在概览页手动填写的本机号码，
+// 格式不合法（含长度/占位符检查，规则与协议层读取共用）时返回空字符串。
+func NormalizeManualPhoneNumber(v string) string {
+	return normalizeSIMPhoneNumber(v)
+}
+
 func normalizeSIMPhoneNumber(v string) string {
 	s := canonicalLocalPhone(v)
 	if s == "" {

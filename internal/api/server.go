@@ -291,6 +291,7 @@ func (s *Server) newRouter() *gin.Engine {
 		api.PATCH("/devices/:device_id/usbnet-mode", s.handleDeviceMgmtSetUSBNetMode)          // 设置 USBNET 模式
 		api.PATCH("/devices/:device_id/flight-mode", s.handleDeviceMgmtSetFlightMode)          // 切换飞行模式
 		api.PATCH("/devices/:device_id/network", s.handleDeviceNetworkPatch)
+		api.PATCH("/devices/:device_id/local-phone", s.handleDeviceMgmtSetLocalPhone) // 手动补录本机号码
 
 		api.GET("/cards/policies", s.handleListCardPolicies)
 		api.GET("/cards/:iccid/policy", s.handleGetCardPolicy)

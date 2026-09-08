@@ -1119,6 +1119,35 @@ paths:
         '500':
           $ref: '#/components/responses/ErrorMessage'
 
+  /devices/{device_id}/local-phone:
+    patch:
+      tags: [devices]
+      summary: 手动补录本机号码
+      description: |
+        当 SIM 卡 EF_MSISDN 未写号码、VoWiFi/IMS 也未学习到号码时，允许手动填写并落库；
+        仍可被后续协议层（AT/QMI/MBIM 读取或 VoWiFi/IMS 注册）成功读取到的号码覆盖。
+      parameters:
+        - $ref: '#/components/parameters/DeviceIDPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetLocalPhoneRequest'
+      responses:
+        '200':
+          description: 保存结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetLocalPhoneResponse'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '404':
+          $ref: '#/components/responses/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/ErrorMessage'
+
   /devices/{device_id}/network:
     patch:
       tags: [devices]
@@ -3680,6 +3709,22 @@ components:
           type: integer
         flight_mode:
           type: boolean
+
+    SetLocalPhoneRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone:
+          type: string
+          description: 号码，6-15 位数字，可带前导 +
+
+    SetLocalPhoneResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        local_phone:
+          type: string
 
     RebootResponse:
       type: object
