@@ -32,6 +32,10 @@ type FlightModeResponse = {
   message?: string
 }
 
+type SetLocalPhoneResponse = {
+  local_phone?: string
+}
+
 type AtCommandResponse = {
   ok?: boolean
   response?: string
@@ -229,6 +233,12 @@ export const devicesService = {
     return callService(async () => {
       await api.patch(`/devices/${id}/usbnet-mode`, { mode })
       return true
+    })
+  },
+  setLocalPhone(id: string, phone: string) {
+    return callService(async () => {
+      const res = await api.patch<SetLocalPhoneResponse>(`/devices/${id}/local-phone`, { phone })
+      return res.data?.local_phone || ''
     })
   },
   fixDiscoveredUSBNet(atPort: string) {

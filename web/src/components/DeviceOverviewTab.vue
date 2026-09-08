@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { Eye24Regular, EyeOff24Regular } from '@vicons/fluent'
+import { ref, computed, watch } from 'vue'
+import { Eye24Regular, EyeOff24Regular, Edit24Regular, Checkmark24Regular, Dismiss20Regular } from '@vicons/fluent'
 import type { DeviceOverviewItem } from '../types/api'
 import { useSensitiveVisibility } from '../composables/useSensitiveVisibility'
 import { activeEsimProfileDisplayName } from './deviceOverviewActiveEsim'
@@ -20,15 +20,57 @@ const props = defineProps<{
   trafficMinuteRx: string
   trafficMinuteTx: string
   e911Starting: boolean
+  savingLocalPhone: boolean
 }>()
 
 const emit = defineEmits<{
   'setup-e911': []
   'refresh': []
+  'save-local-phone': [phone: string]
 }>()
 
 const showSensitive = useSensitiveVisibility()
 const showOperatorSelection = ref(false)
+
+// ---- 本机号码手动补录（无弹框，行内编辑）----
+const editingLocalPhone = ref(false)
+const localPhoneInput = ref('')
+const localPhoneError = ref('')
+const localPhonePattern = /^\+?\d{6,15}$/
+
+function startEditLocalPhone() {
+  localPhoneInput.value = ''
+  localPhoneError.value = ''
+  editingLocalPhone.value = true
+}
+
+function cancelEditLocalPhone() {
+  editingLocalPhone.value = false
+  localPhoneInput.value = ''
+  localPhoneError.value = ''
+}
+
+function confirmEditLocalPhone() {
+  if (props.savingLocalPhone) return
+  const value = localPhoneInput.value.trim()
+  if (!localPhonePattern.test(value)) {
+    localPhoneError.value = '号码格式不正确'
+    return
+  }
+  localPhoneError.value = ''
+  emit('save-local-phone', value)
+}
+
+// 保存完成（savingLocalPhone: true -> false）且号码已非空时，认为保存成功，退出编辑态；
+// 保存失败时号码仍为空，保留输入框和错误提示供重试。
+watch(
+  () => [props.savingLocalPhone, props.device?.local_phone] as const,
+  ([saving], [wasSaving]) => {
+    if (wasSaving && !saving && props.device?.local_phone) {
+      editingLocalPhone.value = false
+    }
+  }
+)
 
 const trafficStateLabel = computed(() => {
   const status = props.device?.traffic_meta?.status
@@ -336,7 +378,52 @@ const networkPanelMessage = computed(() => {
         <FieldRow label="IMEI"      :value="device?.modem?.imei"   :sensitive="!showSensitive" monospace copyable />
         <FieldRow label="ICCID"     :value="device?.modem?.iccid"  :sensitive="!showSensitive" monospace copyable />
         <FieldRow label="IMSI"      :value="device?.modem?.imsi"   :sensitive="!showSensitive" monospace copyable />
-        <FieldRow label="本机号码" :value="device?.local_phone || '--'"  :sensitive="!showSensitive" monospace copyable />
+        <FieldRow
+          label="本机号码"
+          :value="device?.local_phone || '--'"
+          :sensitive="!showSensitive && !editingLocalPhone"
+          monospace
+          copyable
+        >
+          <template v-if="editingLocalPhone">
+            <div class="flex flex-col items-end gap-1" @click.stop>
+              <div class="flex items-center gap-1.5">
+                <el-input
+                  v-model="localPhoneInput"
+                  size="small"
+                  placeholder="+8613800138000"
+                  class="!w-40"
+                  :disabled="savingLocalPhone"
+                  @keyup.enter="confirmEditLocalPhone"
+                  @keyup.esc="cancelEditLocalPhone"
+                />
+                <el-icon
+                  size="16"
+                  class="cursor-pointer text-primary hover:opacity-70"
+                  :class="{ 'opacity-40 pointer-events-none': savingLocalPhone }"
+                  @click="confirmEditLocalPhone"
+                ><Checkmark24Regular /></el-icon>
+                <el-icon
+                  size="16"
+                  class="cursor-pointer text-gray-400 hover:text-gray-600"
+                  :class="{ 'opacity-40 pointer-events-none': savingLocalPhone }"
+                  @click="cancelEditLocalPhone"
+                ><Dismiss20Regular /></el-icon>
+              </div>
+              <span v-if="localPhoneError" class="text-xs text-red-500">{{ localPhoneError }}</span>
+            </div>
+          </template>
+          <template v-else-if="!device?.local_phone">
+            <span
+              class="inline-flex items-center gap-1 justify-end cursor-pointer text-gray-400 hover:text-primary"
+              @click.stop="startEditLocalPhone"
+            >
+              <span>--</span>
+              <el-icon size="14"><Edit24Regular /></el-icon>
+            </span>
+          </template>
+          <template v-else>{{ device.local_phone }}</template>
+        </FieldRow>
         <div v-if="device?.e911_setup_available" class="flex justify-between gap-3">
           <span class="text-gray-500">E911地址</span>
           <el-button

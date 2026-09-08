@@ -700,6 +700,49 @@ func overviewLocalPhone(imsi, iccid string) string {
 	return strings.TrimSpace(phone)
 }
 
+type setLocalPhoneRequest struct {
+	Phone string `json:"phone" binding:"required"`
+}
+
+// handleDeviceMgmtSetLocalPhone 手动补录本机号码：当 SIM 卡的 EF_MSISDN 未写号码、
+// VoWiFi/IMS 也未学习到号码时，允许在概览页手动填写并落库。写入路径与 modem 读取共用
+// （db.RecordModemPhoneNumber），落库后仍可被后续协议层的真实读取结果覆盖。
+func (s *Server) handleDeviceMgmtSetLocalPhone(c *gin.Context) {
+	id := deviceIDParam(c)
+	var req setLocalPhoneRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "参数错误"})
+		return
+	}
+	normalized := db.NormalizeManualPhoneNumber(req.Phone)
+	if normalized == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "号码格式不正确"})
+		return
+	}
+
+	worker := s.pool.GetWorker(id)
+	if worker == nil {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "设备未找到或未运行"})
+		return
+	}
+
+	status := worker.ProjectDeviceStatus()
+	imsi := effectiveOverviewIMSI(worker, status)
+	iccid := strings.TrimSpace(status.ICCID)
+	if imsi == "" && iccid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "设备身份未识别，暂无法保存号码"})
+		return
+	}
+
+	if err := db.RecordModemPhoneNumber(imsi, iccid, normalized); err != nil {
+		logger.Error("保存本机号码失败", "device", id, "err", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "保存失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "local_phone": overviewLocalPhone(imsi, iccid)})
+}
+
 func (s *Server) handleDeviceMgmtList(c *gin.Context) {
 	workers := s.pool.GetAllWorkers()
 	managed := config.ListDevices()

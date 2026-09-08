@@ -891,6 +891,24 @@ async function finishE911Websheet() {
   await refreshDeviceViews()
 }
 
+const savingLocalPhone = ref(false)
+async function saveLocalPhone(phone: string) {
+  const id = String(selectedId.value || '').trim()
+  if (!id || savingLocalPhone.value) return
+  savingLocalPhone.value = true
+  try {
+    const result = await devicesService.setLocalPhone(id, phone)
+    if (!result.ok) throw new Error(result.error.message || '保存本机号码失败')
+    ElMessage.success('本机号码已保存')
+    await refreshDeviceViews()
+  } catch (e: unknown) {
+    const err = toAppError(e)
+    ElMessage.error(err.message || '保存本机号码失败')
+  } finally {
+    savingLocalPhone.value = false
+  }
+}
+
 const rebooting = ref(false)
 async function rebootModem() {
   const id = String(selectedId.value || '').trim()
@@ -1358,7 +1376,9 @@ usePollingScheduler(async () => {
                   :traffic-minute-rx="rollingMinuteRx"
                   :traffic-minute-tx="rollingMinuteTx"
                   :e911-starting="e911Starting"
+                  :saving-local-phone="savingLocalPhone"
                   @setup-e911="openE911Websheet"
+                  @save-local-phone="saveLocalPhone"
                 />
                 <TrafficAnalysisPanel
                   :analysis="deviceAnalysis"
