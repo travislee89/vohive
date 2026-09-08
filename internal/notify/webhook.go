@@ -69,10 +69,7 @@ func NewWebhookChannel(cfg config.WebhookConfig) (*WebhookChannel, error) {
 	if timeoutMs <= 0 {
 		timeoutMs = 5000
 	}
-	retryMax := cfg.RetryMax
-	if retryMax < 0 {
-		retryMax = 0
-	}
+	retryMax := normalizeRetryMax(cfg.RetryMax)
 
 	ch := &WebhookChannel{
 		urls:         cfg.URLs,
@@ -246,9 +243,7 @@ func (w *WebhookChannel) postWithRetry(targetURL string, body []byte, signature 
 
 	for attempt := 0; attempt <= w.retryMax; attempt++ {
 		if attempt > 0 {
-			// 指数退避：1s, 2s, 4s, ...
-			backoff := time.Duration(1<<(attempt-1)) * time.Second
-			time.Sleep(backoff)
+			time.Sleep(retryBackoff(attempt))
 		}
 
 		statusCode, err := w.doPost(targetURL, body, signature)
@@ -264,8 +259,7 @@ func (w *WebhookChannel) postWithRetry(targetURL string, body []byte, signature 
 			return nil
 		}
 
-		// 4xx 客户端错误，不重试
-		if statusCode >= 400 && statusCode < 500 {
+		if !retryableHTTPStatus(statusCode) {
 			return fmt.Errorf("webhook 返回 %d，不重试", statusCode)
 		}
 

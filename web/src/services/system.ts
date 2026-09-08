@@ -29,6 +29,7 @@ export type TelegramSettings = {
   admin_id: number | null
   base_url: string
   proxy: string
+  retry_max: number
 }
 
 export type FeishuSettings = {
@@ -36,6 +37,7 @@ export type FeishuSettings = {
   app_id: string
   app_secret: string
   chat_ids: string[]
+  retry_max: number
 }
 
 export type QQSettings = {
@@ -44,6 +46,7 @@ export type QQSettings = {
   app_secret: string
   group_ids: string
   direct_ids: string
+  retry_max: number
 }
 
 export type WebhookSettings = {
@@ -62,6 +65,7 @@ export type BarkSettings = {
   group: string
   icon: string
   level: string
+  retry_max: number
 }
 
 export type EmailSettings = {
@@ -73,6 +77,7 @@ export type EmailSettings = {
   password: string
   from_address: string
   to_addresses: string[]
+  retry_max: number
 }
 
 export type PushplusSettings = {
@@ -80,6 +85,7 @@ export type PushplusSettings = {
   token: string
   topic: string
   channel: string
+  retry_max: number
 }
 
 export type NotificationsSettingsResponse = {
@@ -100,12 +106,14 @@ export type SaveNotificationsPayload = {
     admin_id: number
     base_url: string
     proxy: string
+    retry_max: number
   }
   feishu: {
     enabled: boolean
     app_id: string
     app_secret: string
     chat_ids: string[]
+    retry_max: number
   }
   qq: {
     enabled: boolean
@@ -113,6 +121,7 @@ export type SaveNotificationsPayload = {
     app_secret: string
     group_ids: string
     direct_ids: string
+    retry_max: number
   }
   email: {
     enabled: boolean
@@ -123,12 +132,14 @@ export type SaveNotificationsPayload = {
     password: string
     from_address: string
     to_addresses: string[]
+    retry_max: number
   }
   pushplus: {
     enabled: boolean
     token: string
     topic: string
     channel: string
+    retry_max: number
   }
   webhook: {
     enabled: boolean
@@ -145,6 +156,7 @@ export type SaveNotificationsPayload = {
     group: string
     icon: string
     level: string
+    retry_max: number
   }
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/travislee89/vohive/internal/config"
 	qqbot "github.com/travislee89/vohive/internal/qqbot"
@@ -46,6 +47,8 @@ func NewQQChannel(cfg config.QQConfig) (*QQChannel, error) {
 		AppSecret:   strings.TrimSpace(cfg.AppSecret),
 		DefaultKind: qqbot.PlainText, // 固定为纯文本
 	}, qqbot.WithPrefix("/"), // 固定为 /，与 TG Bot 统一
+		// 重试间隔基准对齐其余渠道的 1s/2s/4s... 指数退避，次数用户可配置
+		qqbot.WithRetry(normalizeRetryMax(cfg.RetryMax), time.Second),
 		qqbot.WithUnknownCommand(func(ctx context.Context, c qqbot.Conversation, _ qqbot.ParsedCommand) error {
 			channel.logIncoming(c.Incoming())
 			if !channel.isAllowed(c.Incoming()) {

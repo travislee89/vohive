@@ -271,6 +271,11 @@ onMounted(() => {
               <el-input v-model="telegramForm.proxy" :disabled="!telegramForm.enabled" placeholder="例如 http://127.0.0.1:7890" />
               <div class="text-[10px] text-gray-400 mt-1">用于连接 API 服务器的 HTTP 代理</div>
             </div>
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">最大重试次数</label>
+              <el-input-number v-model="telegramForm.retry_max" :min="0" :max="10" :disabled="!telegramForm.enabled" class="w-full !w-full" controls-position="right" />
+              <div class="text-[10px] text-gray-400 mt-1">发送失败后按指数退避重试（1s/2s/4s...），仅对网络错误和 5xx 生效。</div>
+            </div>
           </div>
         </el-tab-pane>
 
@@ -298,6 +303,11 @@ onMounted(() => {
               <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Chat IDs</label>
               <el-input v-model="feishuForm.chat_ids" :disabled="!feishuForm.enabled" placeholder="多个群组用英文逗号分隔" />
               <div class="text-[10px] text-gray-400 mt-1">飞书群聊的 Chat ID (oc_xxxx)，可通过飞书开放平台 API 获取，支持逗号分隔多个群组。</div>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">最大重试次数</label>
+              <el-input-number v-model="feishuForm.retry_max" :min="0" :max="10" :disabled="!feishuForm.enabled" class="w-full !w-full" controls-position="right" />
+              <div class="text-[10px] text-gray-400 mt-1">发送失败后按指数退避重试（1s/2s/4s...），仅对网络错误和 5xx 生效。</div>
             </div>
             <div class="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-500/5 text-xs text-blue-600 dark:text-blue-400/80 leading-relaxed border border-blue-100/50 dark:border-blue-500/10">
               <strong>配置说明：</strong>
@@ -339,6 +349,11 @@ onMounted(() => {
                 <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">User IDs (私聊)</label>
                 <el-input v-model="qqForm.direct_ids" :disabled="!qqForm.enabled" placeholder="用户 OpenID，多个使用逗号分隔" />
               </div>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">最大重试次数</label>
+              <el-input-number v-model="qqForm.retry_max" :min="0" :max="10" :disabled="!qqForm.enabled" class="w-full !w-full" controls-position="right" />
+              <div class="text-[10px] text-gray-400 mt-1">发送失败后按指数退避重试（1s/2s/4s...），仅对限流(429)和 5xx 生效。</div>
             </div>
             <div class="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-500/5 text-xs text-amber-700 dark:text-amber-400/80 leading-relaxed border border-amber-100/50 dark:border-amber-500/10">
               <ol class="list-decimal ml-4 mt-1 space-y-1">
@@ -412,6 +427,12 @@ onMounted(() => {
               <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">图标 (Icon)</label>
               <el-input v-model="barkSettings.icon" :disabled="!barkSettings.enabled" placeholder="图标 URL，可选" />
             </div>
+
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">最大重试次数</label>
+              <el-input-number v-model="barkSettings.retry_max" :min="0" :max="10" :disabled="!barkSettings.enabled" class="w-full !w-full" controls-position="right" />
+              <div class="text-[10px] text-gray-400 mt-1">发送失败后按指数退避重试（1s/2s/4s...），仅对网络错误和 5xx 生效。</div>
+            </div>
           </div>
         </el-tab-pane>
 
@@ -471,6 +492,11 @@ onMounted(() => {
               <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">收件人地址 (To)</label>
               <el-input v-model="emailForm.to_addresses" :disabled="!emailForm.enabled" placeholder="多个收件人请用英文逗号分隔" />
             </div>
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">最大重试次数</label>
+              <el-input-number v-model="emailForm.retry_max" :min="0" :max="10" :disabled="!emailForm.enabled" class="w-full !w-full" controls-position="right" />
+              <div class="text-[10px] text-gray-400 mt-1">发送失败后按指数退避重试（1s/2s/4s...）。</div>
+            </div>
           </div>
         </el-tab-pane>
 
@@ -500,6 +526,11 @@ onMounted(() => {
                 <el-option label="企业微信 (cp)" value="cp" />
                 <el-option label="邮件 (mail)" value="mail" />
               </el-select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">最大重试次数</label>
+              <el-input-number v-model="pushplusForm.retry_max" :min="0" :max="10" :disabled="!pushplusForm.enabled" class="w-full !w-full" controls-position="right" />
+              <div class="text-[10px] text-gray-400 mt-1">发送失败后按指数退避重试（1s/2s/4s...），仅对网络错误和 5xx 生效。</div>
             </div>
           </div>
         </el-tab-pane>

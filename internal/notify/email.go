@@ -6,20 +6,22 @@ import (
 	"fmt"
 	"net/smtp"
 	"strings"
+	"time"
 
 	"github.com/travislee89/vohive/internal/config"
 	"github.com/travislee89/vohive/pkg/logger"
 )
 
 type EmailChannel struct {
-	cfg config.EmailConfig
+	cfg      config.EmailConfig
+	retryMax int
 }
 
 func NewEmailChannel(cfg config.EmailConfig) (*EmailChannel, error) {
 	if cfg.SMTPHost == "" || cfg.SMTPPort == 0 || cfg.FromAddress == "" || len(cfg.ToAddresses) == 0 {
 		return nil, errors.New("email configuration is incomplete")
 	}
-	return &EmailChannel{cfg: cfg}, nil
+	return &EmailChannel{cfg: cfg, retryMax: normalizeRetryMax(cfg.RetryMax)}, nil
 }
 
 func (c *EmailChannel) Name() string {
@@ -31,6 +33,22 @@ func (c *EmailChannel) Send(text string) error {
 }
 
 func (c *EmailChannel) SendWithContext(ctx NotificationContext) error {
+	var lastErr error
+	for attempt := 0; attempt <= c.retryMax; attempt++ {
+		if attempt > 0 {
+			time.Sleep(retryBackoff(attempt))
+			logger.Debug("邮件发送重试", "attempt", attempt+1, "err", lastErr)
+		}
+		if err := c.sendOnce(ctx); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("邮件发送失败（已重试 %d 次）: %w", c.retryMax, lastErr)
+}
+
+func (c *EmailChannel) sendOnce(ctx NotificationContext) error {
 	auth := smtp.PlainAuth("", c.cfg.Username, c.cfg.Password, c.cfg.SMTPHost)
 	addr := fmt.Sprintf("%s:%d", c.cfg.SMTPHost, c.cfg.SMTPPort)
 

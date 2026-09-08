@@ -18,12 +18,14 @@ type notificationSettingsResponse struct {
 		AdminID  int64  `json:"admin_id"`
 		BaseURL  string `json:"base_url"`
 		Proxy    string `json:"proxy"`
+		RetryMax int    `json:"retry_max"`
 	} `json:"telegram"`
 	Feishu struct {
 		Enabled   bool     `json:"enabled"`
 		AppID     string   `json:"app_id"`
 		AppSecret string   `json:"app_secret"`
 		ChatIDs   []string `json:"chat_ids"`
+		RetryMax  int      `json:"retry_max"`
 	} `json:"feishu"`
 	QQ struct {
 		Enabled   bool   `json:"enabled"`
@@ -31,6 +33,7 @@ type notificationSettingsResponse struct {
 		AppSecret string `json:"app_secret"`
 		GroupIDs  string `json:"group_ids"`
 		DirectIDs string `json:"direct_ids"`
+		RetryMax  int    `json:"retry_max"`
 	} `json:"qq"`
 	Webhook struct {
 		Enabled      bool              `json:"enabled"`
@@ -47,11 +50,12 @@ type notificationSettingsResponse struct {
 		AllowedUserIDs []string `json:"allowed_user_ids"`
 	} `json:"weixin"`
 	Bark struct {
-		Enabled bool     `json:"enabled"`
-		URLs    []string `json:"urls"`
-		Group   string   `json:"group"`
-		Icon    string   `json:"icon"`
-		Level   string   `json:"level"`
+		Enabled  bool     `json:"enabled"`
+		URLs     []string `json:"urls"`
+		Group    string   `json:"group"`
+		Icon     string   `json:"icon"`
+		Level    string   `json:"level"`
+		RetryMax int      `json:"retry_max"`
 	} `json:"bark"`
 	Email struct {
 		Enabled     bool     `json:"enabled"`
@@ -62,12 +66,14 @@ type notificationSettingsResponse struct {
 		Password    string   `json:"password"`
 		FromAddress string   `json:"from_address"`
 		ToAddresses []string `json:"to_addresses"`
+		RetryMax    int      `json:"retry_max"`
 	} `json:"email"`
 	Pushplus struct {
-		Enabled bool   `json:"enabled"`
-		Token   string `json:"token"`
-		Topic   string `json:"topic"`
-		Channel string `json:"channel"`
+		Enabled  bool   `json:"enabled"`
+		Token    string `json:"token"`
+		Topic    string `json:"topic"`
+		Channel  string `json:"channel"`
+		RetryMax int    `json:"retry_max"`
 	} `json:"pushplus"`
 }
 
@@ -79,12 +85,14 @@ type updateNotificationSettingsRequest struct {
 		AdminID  int64  `json:"admin_id"`
 		BaseURL  string `json:"base_url"`
 		Proxy    string `json:"proxy"` // HTTP 代理
+		RetryMax int    `json:"retry_max"`
 	} `json:"telegram"`
 	Feishu struct {
 		Enabled   bool     `json:"enabled"`
 		AppID     string   `json:"app_id"`
 		AppSecret string   `json:"app_secret"`
 		ChatIDs   []string `json:"chat_ids"`
+		RetryMax  int      `json:"retry_max"`
 	} `json:"feishu"`
 	QQ struct {
 		Enabled   bool   `json:"enabled"`
@@ -92,6 +100,7 @@ type updateNotificationSettingsRequest struct {
 		AppSecret string `json:"app_secret"`
 		GroupIDs  string `json:"group_ids"`
 		DirectIDs string `json:"direct_ids"`
+		RetryMax  int    `json:"retry_max"`
 	} `json:"qq"`
 	Webhook struct {
 		Enabled      bool              `json:"enabled"`
@@ -104,11 +113,12 @@ type updateNotificationSettingsRequest struct {
 	} `json:"webhook"`
 
 	Bark struct {
-		Enabled bool     `json:"enabled"`
-		URLs    []string `json:"urls"`
-		Group   string   `json:"group"`
-		Icon    string   `json:"icon"`
-		Level   string   `json:"level"`
+		Enabled  bool     `json:"enabled"`
+		URLs     []string `json:"urls"`
+		Group    string   `json:"group"`
+		Icon     string   `json:"icon"`
+		Level    string   `json:"level"`
+		RetryMax int      `json:"retry_max"`
 	} `json:"bark"`
 	Email struct {
 		Enabled     bool     `json:"enabled"`
@@ -119,12 +129,14 @@ type updateNotificationSettingsRequest struct {
 		Password    string   `json:"password"`
 		FromAddress string   `json:"from_address"`
 		ToAddresses []string `json:"to_addresses"`
+		RetryMax    int      `json:"retry_max"`
 	} `json:"email"`
 	Pushplus struct {
-		Enabled bool   `json:"enabled"`
-		Token   string `json:"token"`
-		Topic   string `json:"topic"`
-		Channel string `json:"channel"`
+		Enabled  bool   `json:"enabled"`
+		Token    string `json:"token"`
+		Topic    string `json:"topic"`
+		Channel  string `json:"channel"`
+		RetryMax int    `json:"retry_max"`
 	} `json:"pushplus"`
 }
 
@@ -136,17 +148,20 @@ func (s *Server) handleGetNotificationSettings(c *gin.Context) {
 	resp.Telegram.AdminID = s.fullCfg.Telegram.AdminID
 	resp.Telegram.BaseURL = s.fullCfg.Telegram.BaseURL
 	resp.Telegram.Proxy = s.fullCfg.Telegram.Proxy
+	resp.Telegram.RetryMax = s.fullCfg.Telegram.RetryMax
 
 	resp.Feishu.Enabled = s.fullCfg.Feishu.Enabled
 	resp.Feishu.AppID = s.fullCfg.Feishu.AppID
 	resp.Feishu.AppSecret = s.fullCfg.Feishu.AppSecret
 	resp.Feishu.ChatIDs = s.fullCfg.Feishu.ChatIDs
+	resp.Feishu.RetryMax = s.fullCfg.Feishu.RetryMax
 
 	resp.QQ.Enabled = s.fullCfg.QQ.Enabled
 	resp.QQ.AppID = s.fullCfg.QQ.AppID
 	resp.QQ.AppSecret = s.fullCfg.QQ.AppSecret
 	resp.QQ.GroupIDs = s.fullCfg.QQ.GroupIDs
 	resp.QQ.DirectIDs = s.fullCfg.QQ.DirectIDs
+	resp.QQ.RetryMax = s.fullCfg.QQ.RetryMax
 
 	resp.Webhook.Enabled = s.fullCfg.Webhook.Enabled
 	resp.Webhook.URLs = s.fullCfg.Webhook.URLs
@@ -160,6 +175,7 @@ func (s *Server) handleGetNotificationSettings(c *gin.Context) {
 	resp.Bark.Group = s.fullCfg.Bark.Group
 	resp.Bark.Icon = s.fullCfg.Bark.Icon
 	resp.Bark.Level = s.fullCfg.Bark.Level
+	resp.Bark.RetryMax = s.fullCfg.Bark.RetryMax
 
 	resp.Email.Enabled = s.fullCfg.Email.Enabled
 	resp.Email.UseSSL = s.fullCfg.Email.UseSSL
@@ -169,11 +185,13 @@ func (s *Server) handleGetNotificationSettings(c *gin.Context) {
 	resp.Email.Password = s.fullCfg.Email.Password
 	resp.Email.FromAddress = s.fullCfg.Email.FromAddress
 	resp.Email.ToAddresses = append([]string(nil), s.fullCfg.Email.ToAddresses...)
+	resp.Email.RetryMax = s.fullCfg.Email.RetryMax
 
 	resp.Pushplus.Enabled = s.fullCfg.Pushplus.Enabled
 	resp.Pushplus.Token = s.fullCfg.Pushplus.Token
 	resp.Pushplus.Topic = s.fullCfg.Pushplus.Topic
 	resp.Pushplus.Channel = s.fullCfg.Pushplus.Channel
+	resp.Pushplus.RetryMax = s.fullCfg.Pushplus.RetryMax
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -192,6 +210,7 @@ func (s *Server) handleUpdateNotificationSettings(c *gin.Context) {
 		AdminID:  req.Telegram.AdminID,
 		BaseURL:  strings.TrimSpace(req.Telegram.BaseURL),
 		Proxy:    strings.TrimSpace(req.Telegram.Proxy),
+		RetryMax: req.Telegram.RetryMax,
 	}
 
 	var fsChatIDs []string
@@ -207,6 +226,7 @@ func (s *Server) handleUpdateNotificationSettings(c *gin.Context) {
 		AppID:     strings.TrimSpace(req.Feishu.AppID),
 		AppSecret: strings.TrimSpace(req.Feishu.AppSecret),
 		ChatIDs:   fsChatIDs,
+		RetryMax:  req.Feishu.RetryMax,
 	}
 
 	qq := config.QQConfig{
@@ -215,6 +235,7 @@ func (s *Server) handleUpdateNotificationSettings(c *gin.Context) {
 		AppSecret: strings.TrimSpace(req.QQ.AppSecret),
 		GroupIDs:  strings.TrimSpace(req.QQ.GroupIDs),
 		DirectIDs: strings.TrimSpace(req.QQ.DirectIDs),
+		RetryMax:  req.QQ.RetryMax,
 	}
 
 	whURLs := make([]string, 0, len(req.Webhook.URLs))
@@ -246,11 +267,12 @@ func (s *Server) handleUpdateNotificationSettings(c *gin.Context) {
 	}
 
 	barkCfg := config.BarkConfig{
-		Enabled: req.Bark.Enabled,
-		URLs:    barkURLs,
-		Group:   strings.TrimSpace(req.Bark.Group),
-		Icon:    strings.TrimSpace(req.Bark.Icon),
-		Level:   strings.TrimSpace(req.Bark.Level),
+		Enabled:  req.Bark.Enabled,
+		URLs:     barkURLs,
+		Group:    strings.TrimSpace(req.Bark.Group),
+		Icon:     strings.TrimSpace(req.Bark.Icon),
+		Level:    strings.TrimSpace(req.Bark.Level),
+		RetryMax: req.Bark.RetryMax,
 	}
 
 	emailTo := make([]string, 0, len(req.Email.ToAddresses))
@@ -269,13 +291,15 @@ func (s *Server) handleUpdateNotificationSettings(c *gin.Context) {
 		Password:    strings.TrimSpace(req.Email.Password),
 		FromAddress: strings.TrimSpace(req.Email.FromAddress),
 		ToAddresses: emailTo,
+		RetryMax:    req.Email.RetryMax,
 	}
 
 	pp := config.PushplusConfig{
-		Enabled: req.Pushplus.Enabled,
-		Token:   strings.TrimSpace(req.Pushplus.Token),
-		Topic:   strings.TrimSpace(req.Pushplus.Topic),
-		Channel: strings.TrimSpace(req.Pushplus.Channel),
+		Enabled:  req.Pushplus.Enabled,
+		Token:    strings.TrimSpace(req.Pushplus.Token),
+		Topic:    strings.TrimSpace(req.Pushplus.Topic),
+		Channel:  strings.TrimSpace(req.Pushplus.Channel),
+		RetryMax: req.Pushplus.RetryMax,
 	}
 
 	if tg.Enabled {

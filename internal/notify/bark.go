@@ -16,11 +16,12 @@ import (
 
 // BarkChannel 实现 Channel 接口的 Bark 通知渠道
 type BarkChannel struct {
-	urls   []string
-	group  string
-	icon   string
-	level  string
-	client *http.Client
+	urls     []string
+	group    string
+	icon     string
+	level    string
+	client   *http.Client
+	retryMax int // 最大重试次数
 }
 
 type barkPayload struct {
@@ -41,16 +42,17 @@ func NewBarkChannel(cfg config.BarkConfig) (*BarkChannel, error) {
 	}
 
 	ch := &BarkChannel{
-		urls:  cfg.URLs,
-		group: strings.TrimSpace(cfg.Group),
-		icon:  strings.TrimSpace(cfg.Icon),
-		level: strings.TrimSpace(cfg.Level),
+		urls:     cfg.URLs,
+		group:    strings.TrimSpace(cfg.Group),
+		icon:     strings.TrimSpace(cfg.Icon),
+		level:    strings.TrimSpace(cfg.Level),
+		retryMax: normalizeRetryMax(cfg.RetryMax),
 		client: &http.Client{
 			Timeout: 5 * time.Second,
 		},
 	}
 
-	logger.Info("Bark 渠道已创建", "urls_count", len(cfg.URLs))
+	logger.Info("Bark 渠道已创建", "urls_count", len(cfg.URLs), "retry_max", ch.retryMax)
 	return ch, nil
 }
 
@@ -120,35 +122,12 @@ func (b *BarkChannel) SendWithContextDetailed(ctx NotificationContext) (SendBark
 		wg.Add(1)
 		go func(targetURL string) {
 			defer wg.Done()
-
-			req, err := http.NewRequest(http.MethodPost, targetURL, bytes.NewReader(body))
-			if err != nil {
+			if err := b.postWithRetry(targetURL, body); err != nil {
 				mu.Lock()
-				lastErr = fmt.Errorf("创建请求失败: %w", err)
-				failedURLs = append(failedURLs, targetURL)
-				mu.Unlock()
-				return
-			}
-			req.Header.Set("Content-Type", "application/json; charset=utf-8")
-
-			resp, err := b.client.Do(req)
-			if err != nil {
-				mu.Lock()
-				lastErr = fmt.Errorf("请求发送失败: %w", err)
+				lastErr = err
 				failedURLs = append(failedURLs, targetURL)
 				mu.Unlock()
 				logger.Warn("Bark 推送失败", "url", targetURL, "err", err)
-				return
-			}
-			defer resp.Body.Close()
-			_, _ = io.Copy(io.Discard, resp.Body)
-
-			if resp.StatusCode >= 400 {
-				mu.Lock()
-				lastErr = fmt.Errorf("HTTP 状态码错误: %d", resp.StatusCode)
-				failedURLs = append(failedURLs, targetURL)
-				mu.Unlock()
-				logger.Warn("Bark 推送返回错误状态码", "url", targetURL, "status", resp.StatusCode)
 			}
 		}(u)
 	}
@@ -156,6 +135,55 @@ func (b *BarkChannel) SendWithContextDetailed(ctx NotificationContext) (SendBark
 	wg.Wait()
 	result.FailedURLs = failedURLs
 	return result, lastErr
+}
+
+// postWithRetry 向目标 URL 发送 POST 请求，对 5xx 和网络错误执行指数退避重试
+func (b *BarkChannel) postWithRetry(targetURL string, body []byte) error {
+	var lastErr error
+
+	for attempt := 0; attempt <= b.retryMax; attempt++ {
+		if attempt > 0 {
+			time.Sleep(retryBackoff(attempt))
+		}
+
+		statusCode, err := b.doPost(targetURL, body)
+		if err != nil {
+			lastErr = err
+			logger.Debug("Bark POST 失败，准备重试", "url", targetURL, "attempt", attempt+1, "err", err)
+			continue
+		}
+
+		if statusCode < 400 {
+			return nil
+		}
+
+		if !retryableHTTPStatus(statusCode) {
+			return fmt.Errorf("HTTP 状态码错误: %d，不重试", statusCode)
+		}
+
+		lastErr = fmt.Errorf("HTTP 状态码错误: %d", statusCode)
+		logger.Debug("Bark 返回 5xx，准备重试", "url", targetURL, "attempt", attempt+1, "status", statusCode)
+	}
+
+	return fmt.Errorf("bark 推送失败（已重试 %d 次）: %w", b.retryMax, lastErr)
+}
+
+// doPost 执行单次 HTTP POST 请求，返回状态码
+func (b *BarkChannel) doPost(targetURL string, body []byte) (int, error) {
+	req, err := http.NewRequest(http.MethodPost, targetURL, bytes.NewReader(body))
+	if err != nil {
+		return 0, fmt.Errorf("创建请求失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("请求发送失败: %w", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	return resp.StatusCode, nil
 }
 
 // RegisterCommand 空实现 — Bark 渠道不支持接收命令

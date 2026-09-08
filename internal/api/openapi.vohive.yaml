@@ -3149,6 +3149,9 @@ components:
           type: string
         proxy:
           type: string
+        retry_max:
+          type: integer
+          description: 发送失败后的最大重试次数（指数退避 1s/2s/4s...，仅对网络错误和 5xx 生效）
 
     FeishuSettings:
       type: object
@@ -3163,6 +3166,9 @@ components:
           type: array
           items:
             type: string
+        retry_max:
+          type: integer
+          description: 发送失败后的最大重试次数（指数退避 1s/2s/4s...，仅对网络错误和 5xx 生效）
 
     QQSettings:
       type: object
@@ -3177,6 +3183,9 @@ components:
           type: string
         direct_ids:
           type: string
+        retry_max:
+          type: integer
+          description: 发送失败后的最大重试次数（指数退避 1s/2s/4s...，仅对限流 429 和 5xx 生效）
 
     WebhookSettings:
       type: object
