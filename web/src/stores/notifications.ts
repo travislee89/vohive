@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { AppError } from '../types/domain'
 import type { NotificationFeedItem } from '../types/api'
 import { notificationCenterService } from '../services/notificationCenter'
@@ -8,6 +8,8 @@ export const useNotificationsStore = defineStore('notifications', () => {
   const smsUnread = ref(0)
   const callsUnread = ref(0)
   const feed = ref<NotificationFeedItem[]>([])
+
+  const totalUnread = computed(() => smsUnread.value + callsUnread.value)
 
   const loading = ref(false)
   const lastOkAt = ref<number | null>(null)
@@ -80,6 +82,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
   return {
     smsUnread,
     callsUnread,
+    totalUnread,
     feed,
     loading,
     lastOkAt,
