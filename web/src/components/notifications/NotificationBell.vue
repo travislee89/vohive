@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Alert24Regular } from '@vicons/fluent'
 import { useNotificationsStore } from '../../stores/notifications'
@@ -8,8 +7,6 @@ import type { NotificationFeedItem } from '../../types/api'
 
 const router = useRouter()
 const store = useNotificationsStore()
-
-const totalUnread = computed(() => store.smsUnread + store.callsUnread)
 
 function onShow() {
   void store.fetchFeed()
@@ -44,7 +41,7 @@ function onClearAll() {
 <template>
   <el-popover trigger="click" :width="360" placement="bottom-end" @show="onShow">
     <template #reference>
-      <el-badge :value="totalUnread" :max="99" :hidden="totalUnread === 0" class="notif-bell-badge">
+      <el-badge :value="store.totalUnread" :max="99" :hidden="store.totalUnread === 0" class="notif-bell-badge">
         <el-button text circle class="!px-2">
           <el-icon :size="20"><Alert24Regular /></el-icon>
         </el-button>
@@ -57,7 +54,7 @@ function onClearAll() {
           text
           size="small"
           class="notif-clear-all-btn"
-          :disabled="totalUnread === 0 && store.feed.length === 0"
+          :disabled="store.totalUnread === 0 && store.feed.length === 0"
           @click="onClearAll"
         >清理全部通知</el-button>
       </div>

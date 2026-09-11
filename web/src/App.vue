@@ -3,6 +3,8 @@ import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } fr
 import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import LoadingScreen from './components/LoadingScreen.vue'
+import { useDocumentTitleBadge } from './composables/useDocumentTitleBadge'
+import { useFaviconBadge } from './composables/useFaviconBadge'
 import {
   applyDarkClass,
   getSystemDark,
@@ -14,6 +16,9 @@ import {
 
 const route = useRoute()
 const auth = useAuthStore()
+
+useDocumentTitleBadge()
+useFaviconBadge()
 
 const stored = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? 'light'
 const theme = ref<ThemeMode>(stored === 'dark' || stored === 'auto' || stored === 'light' ? stored : 'light')
