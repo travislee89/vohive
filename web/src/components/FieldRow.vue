@@ -44,7 +44,7 @@ async function copy() {
       :class="[
         monospace ? 'font-mono' : '',
         canCopy ? 'cursor-pointer hover:underline' : '',
-        sensitive ? 'blur-sm select-none transition-all' : ''
+        sensitive ? 'blur-xs select-none transition-all' : ''
       ]"
       :title="titleValue"
       @click="copy"

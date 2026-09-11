@@ -485,9 +485,9 @@ function handleRangeChange(value: string | number | boolean | undefined) {
       </div>
       <div class="flex items-center gap-2">
         <el-radio-group :model-value="range" :disabled="disabled" @change="handleRangeChange">
-          <el-radio-button label="day">日</el-radio-button>
-          <el-radio-button label="week">周</el-radio-button>
-          <el-radio-button label="month">月</el-radio-button>
+          <el-radio-button value="day">日</el-radio-button>
+          <el-radio-button value="week">周</el-radio-button>
+          <el-radio-button value="month">月</el-radio-button>
         </el-radio-group>
         <RefreshButton :loading="loading" :disabled="disabled" @click="emit('refresh')" />
         <el-button
