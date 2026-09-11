@@ -154,8 +154,6 @@ const filteredDevices = computed<DeviceMgmtListItem[]>(() => {
   }
 
   list.sort((a, b) => {
-    let av = 0
-    let bv = 0
     if (sortKey.value === 'name') {
       const an = (a.name || a.id || '').toLowerCase()
       const bn = (b.name || b.id || '').toLowerCase()
@@ -164,8 +162,8 @@ const filteredDevices = computed<DeviceMgmtListItem[]>(() => {
       return 0
     }
     if (sortKey.value === 'signal') {
-      av = Number(a?.modem?.signal_dbm ?? -999)
-      bv = Number(b?.modem?.signal_dbm ?? -999)
+      const av = Number(a?.modem?.signal_dbm ?? -999)
+      const bv = Number(b?.modem?.signal_dbm ?? -999)
       return sortDir.value === 'asc' ? av - bv : bv - av
     }
     return 0
