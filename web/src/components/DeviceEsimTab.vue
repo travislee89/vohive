@@ -502,7 +502,7 @@ onBeforeUnmount(() => {
             <div class="text-xs text-gray-500 dark:text-gray-400 font-mono">
               <template v-if="chipInfo.firmware">固件 {{ chipInfo.firmware }}</template>
               <template v-if="chipInfo.serial_number">
-                · SN: <span class="transition-all" :class="{ 'blur-sm select-none': !showSensitive }">{{ chipInfo.serial_number }}</span>
+                · SN: <span class="transition-all" :class="{ 'blur-xs select-none': !showSensitive }">{{ chipInfo.serial_number }}</span>
               </template>
             </div>
           </div>
@@ -537,7 +537,7 @@ onBeforeUnmount(() => {
         <div class="flex items-center justify-between">
           <div>
             <span class="text-sm font-bold text-gray-900 dark:text-white">eUICC #{{ gi + 1 }}</span>
-            <span class="text-xs text-gray-400 font-mono ml-2 transition-all" :class="{ 'blur-sm select-none': !showSensitive }">
+            <span class="text-xs text-gray-400 font-mono ml-2 transition-all" :class="{ 'blur-xs select-none': !showSensitive }">
               {{ group.eid }}
             </span>
           </div>
@@ -604,7 +604,7 @@ onBeforeUnmount(() => {
               </div>
               <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 ml-4 flex flex-wrap items-center gap-x-2 gap-y-1 transition-all">
                 <span>{{ p.service_provider_name }}</span>
-                <span :class="{ 'blur-sm select-none': !showSensitive }">{{ p.iccid }}</span>
+                <span :class="{ 'blur-xs select-none': !showSensitive }">{{ p.iccid }}</span>
               </div>
             </template>
             <!-- 编辑名称模式 -->

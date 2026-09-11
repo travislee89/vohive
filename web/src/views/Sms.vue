@@ -846,7 +846,7 @@ async function confirmDeleteThread(thread: SmsThread) {
     />
 
     <div class="flex-1 ui-card overflow-hidden relative">
-      <div v-if="loading && threads.length === 0" class="absolute inset-0 z-20 flex items-center justify-center bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+      <div v-if="loading && threads.length === 0" class="absolute inset-0 z-20 flex items-center justify-center bg-white/50 dark:bg-black/20 backdrop-blur-xs">
         <el-icon class="is-loading" size="28"><Loading /></el-icon>
       </div>
 
@@ -1081,7 +1081,7 @@ async function confirmDeleteThread(thread: SmsThread) {
                       </el-button>
                     </div>
                     <div
-                      class="px-5 py-4 rounded-2xl text-sm leading-[1.75] shadow-sm border"
+                      class="px-5 py-4 rounded-2xl text-sm leading-[1.75] shadow-xs border"
                       :class="m.type === 1
                         ? 'bg-white/90 dark:bg-white/5 text-gray-700 dark:text-gray-200 border-gray-100 dark:border-white/10'
                         : 'bg-indigo-50 dark:bg-indigo-500/10 text-gray-800 dark:text-gray-100 border-indigo-100 dark:border-indigo-500/20'"

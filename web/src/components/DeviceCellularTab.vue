@@ -235,7 +235,7 @@ async function locateWithOpenCellID() {
           <div class="flex items-center gap-3 mb-4">
             <div class="flex items-end gap-1" style="height: 32px">
               <div v-for="i in 5" :key="i"
-                class="w-2 rounded-sm"
+                class="w-2 rounded-xs"
                 :style="{ height: (i * 16 + 20) + '%' }"
                 :class="i <= rssiLevel.bars ? (rssiLevel.barClass) : 'bg-gray-200 dark:bg-white/10'"
               />

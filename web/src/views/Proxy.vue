@@ -507,7 +507,7 @@ usePollingScheduler(() => fetchUpstream({ silent: true }), 10000, {
           <div class="flex items-center gap-1.5">
             <el-icon size="16"><Earth24Regular /></el-icon>
             <span class="font-medium">漫游前置代理</span>
-            <span v-if="upstreamStore.proxies.length > 0" class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white bg-blue-500 rounded-full shadow-sm ml-0.5">
+            <span v-if="upstreamStore.proxies.length > 0" class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white bg-blue-500 rounded-full shadow-xs ml-0.5">
               {{ upstreamStore.proxies.length }}
             </span>
           </div>
@@ -518,7 +518,7 @@ usePollingScheduler(() => fetchUpstream({ silent: true }), 10000, {
           <div class="flex items-center gap-1.5">
             <el-icon size="16"><Router24Regular /></el-icon>
             <span class="font-medium">本地出站代理</span>
-            <span v-if="instances.length > 0" class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white bg-blue-500 rounded-full shadow-sm ml-0.5">
+            <span v-if="instances.length > 0" class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white bg-blue-500 rounded-full shadow-xs ml-0.5">
               {{ instances.length }}
             </span>
           </div>

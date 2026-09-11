@@ -345,7 +345,7 @@ const networkPanelMessage = computed(() => {
             <!-- 信号格 -->
             <div class="flex items-end gap-0.5 ml-auto" style="height: 28px">
               <div v-for="i in 5" :key="i"
-                class="w-1.5 rounded-sm"
+                class="w-1.5 rounded-xs"
                 :style="{ height: (i * 18 + 10) + '%' }"
                 :class="i <= signalLevel ? signalBarColor : 'bg-gray-200 dark:bg-white/10'"
               />

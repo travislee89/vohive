@@ -91,7 +91,7 @@ function getSignalBars(dbm: number | null | undefined) {
 <template>
   <button
     type="button"
-    class="group relative block w-full overflow-hidden ui-card ui-card-hover text-left transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
+    class="group relative block w-full overflow-hidden ui-card ui-card-hover text-left transition-all duration-300 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
     @click="emit('open-device', device.id)"
   >
     <div class="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-150" />
@@ -138,7 +138,7 @@ function getSignalBars(dbm: number | null | undefined) {
               <div
                 v-for="i in 4"
                 :key="i"
-                class="w-1 rounded-sm transition-all duration-500"
+                class="w-1 rounded-xs transition-all duration-500"
                 :class="getSignalBars(device.signal_dbm) >= i ? getSignalColor(device.signal_dbm) : 'bg-gray-200 dark:bg-gray-700'"
                 :style="{ height: `${i * 25}%` }"
               />

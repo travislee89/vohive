@@ -82,7 +82,7 @@ async function handleLogin() {
               </div>
               <input 
                 v-model="form.username" 
-                class="w-full bg-white/70 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg py-3 pl-10 pr-4 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500/40 transition-all font-mono text-sm"
+                class="w-full bg-white/70 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg py-3 pl-10 pr-4 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500/40 transition-all font-mono text-sm"
                 placeholder="用户名"
                 type="text"
               />
@@ -96,7 +96,7 @@ async function handleLogin() {
               </div>
               <input 
                 v-model="form.password" 
-                class="w-full bg-white/70 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg py-3 pl-10 pr-4 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500/40 transition-all font-mono text-sm"
+                class="w-full bg-white/70 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg py-3 pl-10 pr-4 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500/40 transition-all font-mono text-sm"
                 placeholder="密码"
                 type="password"
               />
