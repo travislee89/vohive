@@ -1,5 +1,6 @@
 import { watch } from 'vue'
 import { useNotificationsStore } from '../stores/notifications'
+import { useAuthStore } from '../stores/auth'
 
 const FAVICON_HREF = '/favicon.svg'
 const CANVAS_SIZE = 64
@@ -29,9 +30,9 @@ function getFaviconLink(): HTMLLinkElement {
   return link
 }
 
-async function renderFavicon(count: number) {
+async function renderFavicon(count: number, grayscale: boolean) {
   const link = getFaviconLink()
-  if (count <= 0) {
+  if (!grayscale && count <= 0) {
     link.href = FAVICON_HREF
     return
   }
@@ -43,34 +44,39 @@ async function renderFavicon(count: number) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
+  ctx.filter = grayscale ? 'grayscale(1) opacity(0.55)' : 'none'
   ctx.drawImage(img, 0, 0, CANVAS_SIZE, CANVAS_SIZE)
+  ctx.filter = 'none'
 
-  const text = count > MAX_DISPLAY_COUNT ? '99+' : String(count)
-  const radius = CANVAS_SIZE * (text.length > 2 ? 0.36 : 0.32)
-  const cx = CANVAS_SIZE - radius * 0.85
-  const cy = CANVAS_SIZE - radius * 0.85
+  if (!grayscale && count > 0) {
+    const text = count > MAX_DISPLAY_COUNT ? '99+' : String(count)
+    const radius = CANVAS_SIZE * (text.length > 2 ? 0.36 : 0.32)
+    const cx = CANVAS_SIZE - radius * 0.85
+    const cy = CANVAS_SIZE - radius * 0.85
 
-  ctx.beginPath()
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2)
-  ctx.fillStyle = '#ef4444'
-  ctx.fill()
+    ctx.beginPath()
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+    ctx.fillStyle = '#ef4444'
+    ctx.fill()
 
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `700 ${text.length > 2 ? radius * 0.95 : radius * 1.2}px sans-serif`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(text, cx, cy + 1)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${text.length > 2 ? radius * 0.95 : radius * 1.2}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, cx, cy + 1)
+  }
 
   link.href = canvas.toDataURL('image/png')
 }
 
 export function useFaviconBadge() {
   const store = useNotificationsStore()
+  const auth = useAuthStore()
 
   watch(
-    () => store.totalUnread,
-    (count) => {
-      void renderFavicon(count)
+    [() => store.totalUnread, () => auth.isAuthenticated],
+    ([count, isAuthenticated]) => {
+      void renderFavicon(count, !isAuthenticated)
     },
     { immediate: true }
   )
