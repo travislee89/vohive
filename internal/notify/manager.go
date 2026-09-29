@@ -297,8 +297,21 @@ func (m *Manager) notifySMS(smsID uint, deviceID, sender, content, source string
 	if source == "" {
 		source = "蜂窝"
 	}
-	msg := fmt.Sprintf("收到新短信 / %s\n设备  %s\n号码  %s\n时间  %s\n内容  %s",
-		source, deviceID, sender, timestamp.Format("2006-01-02 15:04:05"), content)
+
+	deviceName := m.resolveDeviceName(deviceID)
+	localPhone, operator := m.resolveSMSMeta(deviceID)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "收到新短信 / %s\n设备  %s\n", source, deviceID)
+	if deviceName != "" {
+		fmt.Fprintf(&b, "设备名称 %s\n", deviceName)
+	}
+	fmt.Fprintf(&b, "来信号码  %s\n", sender)
+	if localPhone != "" {
+		fmt.Fprintf(&b, "本机号码 %s\n", localPhone)
+	}
+	fmt.Fprintf(&b, "时间  %s\n内容  %s", timestamp.Format("2006-01-02 15:04:05"), content)
+	msg := b.String()
 
 	logger.Info("开始发送短信通知",
 		"event", "sms_received",
@@ -306,13 +319,11 @@ func (m *Manager) notifySMS(smsID uint, deviceID, sender, content, source string
 		"source", source,
 		"channel_count", len(m.channels))
 
-	localPhone, operator := m.resolveSMSMeta(deviceID)
-
 	m.broadcastWithContext(NotificationContext{
 		Event:      "sms_received",
 		Text:       msg,
 		DeviceID:   deviceID,
-		DeviceName: m.resolveDeviceName(deviceID),
+		DeviceName: deviceName,
 		Timestamp:  timestamp,
 		SMS: &SMSContext{
 			ID:         smsID,
