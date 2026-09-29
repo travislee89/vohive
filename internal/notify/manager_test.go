@@ -171,7 +171,7 @@ func TestManagerNotifyEventsToWebhookWithTemplate(t *testing.T) {
 	for _, payload := range payloads {
 		byEvent[payload.Event] = payload
 	}
-	if got := byEvent["sms_received"].Text; got != "[wwan0] 收到新短信 / 蜂窝\n设备  wwan0\n号码  +8613800000000\n时间  2026-04-13 12:00:00\n内容  hello" {
+	if got := byEvent["sms_received"].Text; got != "[wwan0] 收到新短信 / 蜂窝\n设备  wwan0\n来信号码  +8613800000000\n时间  2026-04-13 12:00:00\n内容  hello" {
 		t.Fatalf("sms text=%q", got)
 	}
 	if got := byEvent["ip_rotated"].Meta.DeviceID; got != "wwan0" {
@@ -256,7 +256,7 @@ func TestManagerNotifySMSWithSourceUsesProvidedSourceLabel(t *testing.T) {
 	notifier.NotifySMSWithSource("wwan0", "+8613800000000", "hello", "VoWiFi", ts)
 
 	waitUntil(t, time.Second, func() bool { return capture.Last() != "" })
-	want := "收到新短信 / VoWiFi\n设备  wwan0\n号码  +8613800000000\n时间  2026-04-13 12:00:00\n内容  hello"
+	want := "收到新短信 / VoWiFi\n设备  wwan0\n来信号码  +8613800000000\n时间  2026-04-13 12:00:00\n内容  hello"
 	if got := capture.Last(); got != want {
 		t.Fatalf("text=%q, want %q", got, want)
 	}
