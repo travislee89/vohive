@@ -6,11 +6,13 @@ import (
 	"html"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/travislee89/vohive/internal/config"
+	"github.com/travislee89/vohive/internal/db"
 	"github.com/travislee89/vohive/pkg/logger"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -95,9 +97,30 @@ func (t *TelegramChannel) Send(text string) error {
 	if t == nil || t.api == nil {
 		return nil
 	}
+	return t.sendMessage(buildTelegramTextMessage(t.chatID, text))
+}
 
+// SendSMSWithReadAction 发送短信转发消息，并附带「标记已读」内联按钮。
+// 点击后 bot 收到 callback_query，据此把对应短信标记为已读、清除 vohive 侧的未读通知。
+func (t *TelegramChannel) SendSMSWithReadAction(text string, smsID uint) error {
+	if t == nil || t.api == nil {
+		return nil
+	}
 	msg := buildTelegramTextMessage(t.chatID, text)
+	msg.ReplyMarkup = smsReadMarkup(smsID)
+	return t.sendMessage(msg)
+}
 
+// smsReadCallbackPrefix 「标记已读」按钮回调数据的前缀，完整形如 "sms_read:<短信ID>"
+const smsReadCallbackPrefix = "sms_read:"
+
+func smsReadMarkup(smsID uint) tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("✅ 标记已读", smsReadCallbackPrefix+strconv.FormatUint(uint64(smsID), 10)),
+	))
+}
+
+func (t *TelegramChannel) sendMessage(msg tgbotapi.MessageConfig) error {
 	var lastErr error
 	for attempt := 0; attempt <= t.retryMax; attempt++ {
 		if attempt > 0 {
@@ -307,6 +330,10 @@ func (t *TelegramChannel) handleCallback(cb *tgbotapi.CallbackQuery) {
 	if cb.Message == nil || cb.Message.Chat.ID != t.chatID {
 		return
 	}
+	if strings.HasPrefix(cb.Data, smsReadCallbackPrefix) {
+		t.handleSMSReadCallback(cb)
+		return
+	}
 	// 应答回调，消除客户端加载态
 	if _, err := t.api.Request(tgbotapi.NewCallback(cb.ID, "")); err != nil {
 		logger.Warn("应答 Telegram 回调失败", "err", err)
@@ -329,6 +356,42 @@ func (t *TelegramChannel) handleCallback(cb *tgbotapi.CallbackQuery) {
 	resp := handler(ctx, args)
 	if resp != "" {
 		ctx.Reply(resp)
+	}
+}
+
+// handleSMSReadCallback 处理「标记已读」按钮：标记对应短信已读，并移除消息上的按钮避免重复点击。
+func (t *TelegramChannel) handleSMSReadCallback(cb *tgbotapi.CallbackQuery) {
+	answer := func(text string) {
+		if _, err := t.api.Request(tgbotapi.NewCallback(cb.ID, text)); err != nil {
+			logger.Warn("应答 Telegram 回调失败", "err", err)
+		}
+	}
+
+	id, err := strconv.ParseUint(strings.TrimPrefix(cb.Data, smsReadCallbackPrefix), 10, 64)
+	if err != nil || id == 0 {
+		logger.Warn("忽略无效的短信已读回调", "data", cb.Data)
+		answer("无效的短信")
+		return
+	}
+
+	marked, err := db.MarkSMSRead(uint(id))
+	if err != nil {
+		logger.Error("Telegram 标记短信已读失败", "sms_id", id, "err", err)
+		answer("标记已读失败")
+		return
+	}
+
+	if marked {
+		logger.Info("Telegram 已标记短信已读", "sms_id", id)
+		answer("已标记已读")
+	} else {
+		answer("已是已读状态")
+	}
+
+	empty := tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}}
+	edit := tgbotapi.NewEditMessageReplyMarkup(cb.Message.Chat.ID, cb.Message.MessageID, empty)
+	if _, err := t.api.Request(edit); err != nil {
+		logger.Warn("移除 Telegram 短信已读按钮失败", "err", err)
 	}
 }
 

@@ -566,6 +566,13 @@ func (m *Manager) broadcastWithRules(ctx NotificationContext, messageType string
 				} else {
 					sendErr = ch.Send(renderedText)
 				}
+			case smsIDPtr != nil && target == "telegram":
+				// 带 SMS 记录 ID 的短信转发到 Telegram 时附带「标记已读」按钮
+				if tg, ok := ch.(*TelegramChannel); ok {
+					sendErr = tg.SendSMSWithReadAction(renderedText, *smsIDPtr)
+				} else {
+					sendErr = ch.Send(renderedText)
+				}
 			default:
 				if withCtx, ok := ch.(contextualChannel); ok {
 					sendErr = withCtx.SendWithContext(sendCtx)

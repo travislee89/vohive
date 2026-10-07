@@ -115,3 +115,16 @@ func TestParseCallbackData(t *testing.T) {
 		}
 	}
 }
+
+func TestSMSReadMarkupCarriesSMSID(t *testing.T) {
+	t.Parallel()
+
+	markup := smsReadMarkup(4242)
+	if len(markup.InlineKeyboard) != 1 || len(markup.InlineKeyboard[0]) != 1 {
+		t.Fatalf("InlineKeyboard shape = %v, want 1x1", markup.InlineKeyboard)
+	}
+	btn := markup.InlineKeyboard[0][0]
+	if btn.CallbackData == nil || *btn.CallbackData != "sms_read:4242" {
+		t.Fatalf("CallbackData = %v, want sms_read:4242", btn.CallbackData)
+	}
+}
