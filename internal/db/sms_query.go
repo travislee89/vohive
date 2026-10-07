@@ -1,6 +1,11 @@
 package db
 
-import "time"
+import (
+	"errors"
+	"time"
+
+	"gorm.io/gorm"
+)
 
 func GetSMSContacts(limit int, beforeTs *time.Time, beforePeer string) ([]SMSContact, error) {
 	if DB == nil {
@@ -117,6 +122,37 @@ func ResetAllSMSUnread() error {
 		return nil
 	}
 	return DB.Model(&SMSContact{}).Where("unread_count > 0").Update("unread_count", 0).Error
+}
+
+// MarkSMSRead 将单条未读的接收短信标记为已读，并同步减少所在会话的未读计数（不低于 0）。
+// 返回 false 表示短信不存在、不是接收短信或本就已读，调用方可据此给出不同提示。
+func MarkSMSRead(id uint) (bool, error) {
+	if DB == nil {
+		return false, nil
+	}
+	var marked bool
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var sms SMS
+		if err := tx.Select("id", "imsi", "peer").
+			Where("id = ? AND type = ? AND status = ?", id, 1, 0).
+			First(&sms).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		if err := tx.Model(&SMS{}).Where("id = ?", sms.ID).Update("status", 1).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&SMSContact{}).
+			Where("imsi = ? AND peer = ? AND unread_count > 0", sms.IMSI, sms.Peer).
+			Update("unread_count", gorm.Expr("unread_count - 1")).Error; err != nil {
+			return err
+		}
+		marked = true
+		return nil
+	})
+	return marked, err
 }
 
 func GetSMSByIMSIAndPeer(imsi string, peer string, limit int, beforeTs *time.Time, beforeID uint) ([]SMS, error) {
