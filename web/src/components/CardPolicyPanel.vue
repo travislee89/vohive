@@ -490,12 +490,12 @@ async function onSMSDeliveryReportsToggle(rawVal: string | number | boolean) {
 
         <div v-show="quota.enabled" class="space-y-3">
           <!-- 套餐流量 + 阈值（并排各占一半） -->
-          <div class="grid grid-cols-2 gap-2">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div class="space-y-1">
-              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">套餐流量</label>
+              <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">套餐流量</label>
               <div class="flex gap-2">
-                <el-input-number v-model="quota.sizeValue" :min="0" :step="1" :controls="false" class="w-full" />
-                <el-select v-model="quota.sizeUnit" class="w-20 shrink-0">
+                <el-input-number v-model="quota.sizeValue" :min="0" :step="1" :controls="false" class="!w-full min-w-0" />
+                <el-select v-model="quota.sizeUnit" class="!w-24 shrink-0">
                   <el-option label="MB" value="MB" />
                   <el-option label="GB" value="GB" />
                   <el-option label="TB" value="TB" />
@@ -503,10 +503,10 @@ async function onSMSDeliveryReportsToggle(rawVal: string | number | boolean) {
               </div>
             </div>
             <div v-show="quota.autoStopEnabled" class="space-y-1">
-              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">达到使用量阈值</label>
+              <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">达到使用量阈值</label>
               <div class="flex gap-2">
-                <el-input-number v-model="quota.autoStopValue" :min="0" :step="1" :controls="false" class="w-full" />
-                <el-select v-model="quota.autoStopUnit" class="w-20 shrink-0">
+                <el-input-number v-model="quota.autoStopValue" :min="0" :step="1" :controls="false" class="!w-full min-w-0" />
+                <el-select v-model="quota.autoStopUnit" class="!w-24 shrink-0">
                   <el-option label="MB" value="MB" />
                   <el-option label="GB" value="GB" />
                   <el-option label="TB" value="TB" />
@@ -516,15 +516,15 @@ async function onSMSDeliveryReportsToggle(rawVal: string | number | boolean) {
           </div>
 
           <!-- 计费日 + 时区 -->
-          <div class="grid grid-cols-2 gap-2">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div class="space-y-1">
-              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">计费日</label>
-              <el-input-number v-model="quota.billingDay" :min="1" :max="31" :controls="false" class="w-full" />
+              <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">计费日</label>
+              <el-input-number v-model="quota.billingDay" :min="1" :max="31" :controls="false" class="!w-full min-w-0" />
               <div class="text-xs text-gray-400">每月 1-31 日，无该日取月底</div>
             </div>
             <div class="space-y-1">
-              <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">计费时区</label>
-              <el-select v-model="quota.billingTimezone" filterable allow-create clearable placeholder="跟随系统" class="w-full">
+              <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">计费时区</label>
+              <el-select v-model="quota.billingTimezone" filterable allow-create clearable placeholder="跟随系统" class="!w-full">
                 <el-option label="跟随系统" value="" />
                 <el-option v-for="tz in COMMON_TZ" :key="tz" :label="tz" :value="tz" />
               </el-select>
