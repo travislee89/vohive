@@ -1,8 +1,11 @@
 package updater
 
 import (
+	"archive/tar"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"runtime"
@@ -10,11 +13,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/minio/selfupdate"
 	"github.com/travislee89/vohive/internal/global"
 	"github.com/travislee89/vohive/pkg/logger"
-	"github.com/minio/selfupdate"
+	"github.com/ulikunitz/xz"
 	"golang.org/x/mod/semver"
 )
+
+// archiveSuffix 是 release 资产的压缩格式后缀（tar 包内含单个可执行文件）。
+const archiveSuffix = ".tar.xz"
 
 const (
 	repoOwner = "travislee89"
@@ -119,7 +126,7 @@ func ApplyUpdate() error {
 		return fmt.Errorf("failed to decode release info: %w", err)
 	}
 
-	// 拼接对应的 asset name。例如: vohive_v1.0.0_linux_amd64
+	// 拼接对应的 asset name。例如: vohive_v1.0.0_linux_amd64.tar.xz
 	targetGoos := runtime.GOOS
 	targetGoarch := runtime.GOARCH
 	if targetGoarch == "arm" {
@@ -129,17 +136,11 @@ func ApplyUpdate() error {
 	binaryName := "vohive"
 	assetPrefix := fmt.Sprintf("%s_%s_%s_%s", binaryName, release.TagName, targetGoos, targetGoarch)
 
-	var downloadURL string
-	for _, asset := range release.Assets {
-		if strings.HasPrefix(asset.Name, assetPrefix) {
-			downloadURL = asset.BrowserDownloadURL
-			break
-		}
-	}
-
-	if downloadURL == "" {
+	asset, ok := selectAsset(release.Assets, assetPrefix)
+	if !ok {
 		return fmt.Errorf("no matching asset found for architecture %s_%s", targetGoos, targetGoarch)
 	}
+	downloadURL := asset.BrowserDownloadURL
 
 	logger.Info("开始下载更新", "url", downloadURL)
 
@@ -154,8 +155,16 @@ func ApplyUpdate() error {
 		return fmt.Errorf("download failed with status %d", dlResp.StatusCode)
 	}
 
+	var binary io.Reader = dlResp.Body
+	if strings.HasSuffix(asset.Name, archiveSuffix) {
+		binary, err = extractBinaryFromTarXz(dlResp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to extract update archive: %w", err)
+		}
+	}
+
 	// 执行替换
-	err = selfupdate.Apply(dlResp.Body, selfupdate.Options{})
+	err = selfupdate.Apply(binary, selfupdate.Options{})
 	if err != nil {
 		// 回滚
 		if rerr := selfupdate.RollbackError(err); rerr != nil {
@@ -178,4 +187,45 @@ func ApplyUpdate() error {
 	}()
 
 	return nil
+}
+
+// selectAsset 优先选择 .tar.xz 压缩包，兼容旧版本 release 中的裸二进制资产。
+func selectAsset(assets []Asset, prefix string) (Asset, bool) {
+	var fallback *Asset
+	for i := range assets {
+		if !strings.HasPrefix(assets[i].Name, prefix) {
+			continue
+		}
+		if strings.HasSuffix(assets[i].Name, archiveSuffix) {
+			return assets[i], true
+		}
+		if fallback == nil && assets[i].Name == prefix {
+			fallback = &assets[i]
+		}
+	}
+	if fallback != nil {
+		return *fallback, true
+	}
+	return Asset{}, false
+}
+
+// extractBinaryFromTarXz 返回 tar.xz 包中第一个普通文件（即 vohive 可执行文件）的内容流。
+func extractBinaryFromTarXz(r io.Reader) (io.Reader, error) {
+	xzr, err := xz.NewReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("open xz stream: %w", err)
+	}
+	tr := tar.NewReader(xzr)
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return nil, errors.New("no executable found in archive")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read tar entry: %w", err)
+		}
+		if hdr.Typeflag == tar.TypeReg {
+			return tr, nil
+		}
+	}
 }
