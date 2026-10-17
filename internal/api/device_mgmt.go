@@ -704,9 +704,9 @@ type setLocalPhoneRequest struct {
 	Phone string `json:"phone" binding:"required"`
 }
 
-// handleDeviceMgmtSetLocalPhone 手动补录本机号码：当 SIM 卡的 EF_MSISDN 未写号码、
-// VoWiFi/IMS 也未学习到号码时，允许在概览页手动填写并落库。写入路径与 modem 读取共用
-// （db.RecordModemPhoneNumber），落库后仍可被后续协议层的真实读取结果覆盖。
+// handleDeviceMgmtSetLocalPhone 手动补录/编辑本机号码：当 SIM 卡的 EF_MSISDN 未写号码、
+// 或已识别号码不正确时，允许在概览页手动填写并落库。手动号码写入 modem 列并立即作为
+// 当前生效号码（db.RecordManualPhoneNumber），后续协议层的真实读取结果仍可覆盖。
 func (s *Server) handleDeviceMgmtSetLocalPhone(c *gin.Context) {
 	id := deviceIDParam(c)
 	var req setLocalPhoneRequest
@@ -734,7 +734,7 @@ func (s *Server) handleDeviceMgmtSetLocalPhone(c *gin.Context) {
 		return
 	}
 
-	if err := db.RecordModemPhoneNumber(imsi, iccid, normalized); err != nil {
+	if err := db.RecordManualPhoneNumber(imsi, iccid, normalized); err != nil {
 		logger.Error("保存本机号码失败", "device", id, "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "保存失败: " + err.Error()})
 		return
