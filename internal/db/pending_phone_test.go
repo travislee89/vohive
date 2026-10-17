@@ -117,3 +117,46 @@ func TestGetPhoneNumberPrefersIMSISubscription(t *testing.T) {
 		t.Fatalf("phone=%q, want +447700900127 from IMSI subscription", got)
 	}
 }
+
+func TestRecordManualPhoneOverridesVoWiFiPhone(t *testing.T) {
+	initPhoneNumberTestDB(t)
+	imsi := "234150000000010"
+	if err := RecordVoWiFiPhoneNumber(imsi, "", "+447700900130"); err != nil {
+		t.Fatalf("RecordVoWiFiPhoneNumber error=%v", err)
+	}
+	if err := RecordManualPhoneNumber(imsi, "", "+447700900131"); err != nil {
+		t.Fatalf("RecordManualPhoneNumber error=%v", err)
+	}
+	got, err := GetSIMCardPhoneNumberByIMSI(imsi)
+	if err != nil {
+		t.Fatalf("GetSIMCardPhoneNumberByIMSI error=%v", err)
+	}
+	if got != "+447700900131" {
+		t.Fatalf("phone=%q, want manual +447700900131", got)
+	}
+	// 再次手动编辑应直接替换
+	if err := RecordManualPhoneNumber(imsi, "", "+447700900132"); err != nil {
+		t.Fatalf("RecordManualPhoneNumber error=%v", err)
+	}
+	if got, _ := GetSIMCardPhoneNumberByIMSI(imsi); got != "+447700900132" {
+		t.Fatalf("phone=%q, want edited +447700900132", got)
+	}
+}
+
+func TestRecordManualPhoneOverridesPendingVoWiFiPhone(t *testing.T) {
+	initPhoneNumberTestDB(t)
+	iccid := "8944000000000000010"
+	if err := RecordVoWiFiPhoneNumber("", iccid, "+447700900133"); err != nil {
+		t.Fatalf("RecordVoWiFiPhoneNumber error=%v", err)
+	}
+	if err := RecordManualPhoneNumber("", iccid, "+447700900134"); err != nil {
+		t.Fatalf("RecordManualPhoneNumber error=%v", err)
+	}
+	got, err := GetPhoneNumberByIMSIOrICCID("", iccid)
+	if err != nil {
+		t.Fatalf("GetPhoneNumberByIMSIOrICCID error=%v", err)
+	}
+	if got != "+447700900134" {
+		t.Fatalf("phone=%q, want manual +447700900134", got)
+	}
+}

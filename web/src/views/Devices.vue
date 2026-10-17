@@ -890,7 +890,7 @@ async function finishE911Websheet() {
 }
 
 const savingLocalPhone = ref(false)
-async function saveLocalPhone(phone: string) {
+async function saveLocalPhone(phone: string, done?: (ok: boolean) => void) {
   const id = String(selectedId.value || '').trim()
   if (!id || savingLocalPhone.value) return
   savingLocalPhone.value = true
@@ -898,10 +898,12 @@ async function saveLocalPhone(phone: string) {
     const result = await devicesService.setLocalPhone(id, phone)
     if (!result.ok) throw new Error(result.error.message || '保存本机号码失败')
     ElMessage.success('本机号码已保存')
+    done?.(true)
     await refreshDeviceViews()
   } catch (e: unknown) {
     const err = toAppError(e)
     ElMessage.error(err.message || '保存本机号码失败')
+    done?.(false)
   } finally {
     savingLocalPhone.value = false
   }

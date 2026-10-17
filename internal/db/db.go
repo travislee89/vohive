@@ -524,6 +524,9 @@ func UpdateSIMCardVoWiFiPhoneNumberByIMSI(imsi, phone string) error {
 	return updateSIMCardPhoneNumberByIMSI(imsi, phone, "vowifi")
 }
 
+// updateSIMCardPhoneNumberByIMSI 按来源写入号码：vowifi 优先级高于 modem；
+// manual（用户在概览页手动填写/编辑）写入 modem 列，但直接覆盖当前生效号码，
+// 不受 vowifi 优先级约束，后续协议层再次读取时仍会按原规则重新计算。
 func updateSIMCardPhoneNumberByIMSI(imsi, phone, source string) error {
 	imsi = strings.TrimSpace(imsi)
 	if imsi == "" || DB == nil {
@@ -572,10 +575,10 @@ func updateSIMCardPhoneNumberByIMSI(imsi, phone, source string) error {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if source == "modem" {
-		row.ModemPhoneNumber = normalized
-	} else {
+	if source == "vowifi" {
 		row.VowifiPhoneNumber = normalized
+	} else {
+		row.ModemPhoneNumber = normalized
 	}
 	return DB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "imsi"}},
@@ -584,7 +587,7 @@ func updateSIMCardPhoneNumberByIMSI(imsi, phone, source string) error {
 }
 
 // updatePendingPhoneByICCID 与 updateSIMCardPhoneNumberByIMSI 同构，但按 ICCID 暂存。
-// 优先级同样 vowifi > modem。
+// 优先级同样 vowifi > modem；manual 来源直接生效。
 func updatePendingPhoneByICCID(iccid, phone, source string) error {
 	iccid = strings.TrimSpace(iccid)
 	if iccid == "" || DB == nil {
@@ -617,10 +620,10 @@ func updatePendingPhoneByICCID(iccid, phone, source string) error {
 		"updated_at":   now,
 	}
 	row := PendingPhoneNumber{ICCID: iccid, PhoneNumber: finalPhone, CreatedAt: now, UpdatedAt: now}
-	if source == "modem" {
-		row.ModemPhoneNumber = normalized
-	} else {
+	if source == "vowifi" {
 		row.VowifiPhoneNumber = normalized
+	} else {
+		row.ModemPhoneNumber = normalized
 	}
 	return DB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "iccid"}},
@@ -637,6 +640,15 @@ func RecordModemPhoneNumber(imsi, iccid, phone string) error {
 }
 
 // RecordVoWiFiPhoneNumber 路由：IMSI 已知写 sim_subscriptions，否则按 ICCID 暂存。
+// RecordManualPhoneNumber 写入用户手动填写/编辑的本机号码，路由规则同 RecordModemPhoneNumber，
+// 但立即作为当前生效号码（覆盖已学习到的 vowifi 号码）。
+func RecordManualPhoneNumber(imsi, iccid, phone string) error {
+	if strings.TrimSpace(imsi) != "" {
+		return updateSIMCardPhoneNumberByIMSI(imsi, phone, "manual")
+	}
+	return updatePendingPhoneByICCID(iccid, phone, "manual")
+}
+
 func RecordVoWiFiPhoneNumber(imsi, iccid, phone string) error {
 	if strings.TrimSpace(imsi) != "" {
 		return UpdateSIMCardVoWiFiPhoneNumberByIMSI(imsi, phone)
